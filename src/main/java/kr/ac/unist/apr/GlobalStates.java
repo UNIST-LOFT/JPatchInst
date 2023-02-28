@@ -37,9 +37,10 @@ public class GlobalStates {
     if (!System.getenv("GREYBOX_BRANCH").equals("1")) {
       return;
     }
-    
+
     try {
-      FileWriter fw=new FileWriter("/tmp/branchInfo.txt");
+      String outputFile=System.getenv("GREYBOX_RESULT");
+      FileWriter fw=new FileWriter(outputFile);
       for (Map.Entry<Long, Long> entry : branchInfos.entrySet()) {
         fw.write(entry.getKey()+","+entry.getValue()+"\n");
       }
