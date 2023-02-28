@@ -1,8 +1,13 @@
 import subprocess
 import sys
+import os
 
 def checkout(project:str,path:str):
     subject, bug_id = project.split('_')
+
+    if os.path.exists(f'{path}/{project}'):
+        os.rmdir(f'{path}/{project}')
+
     subprocess.run(['wget',f'https://github.com/ali-ghanbari/d4j-{subject.lower()}/raw/master/{subject}-{bug_id}.tar.gz'])
     subprocess.run(['tar','-xf',f'{subject}-{bug_id}.tar.gz'])
     subprocess.run(['mv',f'{bug_id}',f'{path}/{project}'])
