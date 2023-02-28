@@ -26,7 +26,6 @@ public class Instrumentation extends BodyTransformer{
 
     @Override
     protected void internalTransform(Body arg0, String arg1, Map<String, String> arg2) {
-        SootMethod method=arg0.getMethod();
         Chain<Unit> units=arg0.getUnits();
         
         Iterator<?> iter=units.snapshotIterator();

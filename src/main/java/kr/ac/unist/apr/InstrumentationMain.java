@@ -1,19 +1,15 @@
 package kr.ac.unist.apr;
 
 import java.io.File;
-import java.io.IOException;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.List;
-import java.util.Set;
 
 import soot.Pack;
 import soot.PackManager;
 import soot.Scene;
-import soot.SootClass;
 import soot.Transform;
 import soot.options.Options;
-import soot.util.Chain;
 
 public class InstrumentationMain {
     public static void main(String[] args) {
