@@ -18,6 +18,10 @@ public class GlobalStates {
   public static Map<Long,Long> branchInfos=new HashMap<>();
 
   public static void setBranchInfo(long id){
+    if (!System.getenv("GREYBOX_BRANCH").equals("1")) {
+      return;
+    }
+
     long currentKey=id^previousId;
     
     if (branchInfos.containsKey(currentKey)){
@@ -30,6 +34,10 @@ public class GlobalStates {
   }
   
   public static void saveBranchInfo() {
+    if (!System.getenv("GREYBOX_BRANCH").equals("1")) {
+      return;
+    }
+    
     try {
       FileWriter fw=new FileWriter("/tmp/branchInfo.txt");
       for (Map.Entry<Long, Long> entry : branchInfos.entrySet()) {
