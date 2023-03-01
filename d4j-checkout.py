@@ -13,7 +13,7 @@ def checkout(project:str,path:str):
         subprocess.run(['wget',f'https://github.com/ali-ghanbari/d4j-{subject.lower()}/raw/master/{subject}-{bug_id}.tar.gz'])
     subprocess.run(['tar','-xf',f'{subject}-{bug_id}.tar.gz'])
     if subject=='Lang':
-        subprocess.rum(['rm','-rf','src/test/java/org/apache/commons/lang3/reflect/TypeUtilsTest.java'],cwd=f'{bug_id}')
+        subprocess.run(['rm','-rf','src/test/java/org/apache/commons/lang3/reflect/TypeUtilsTest.java'],cwd=f'{bug_id}')
     subprocess.run(['mv',f'{bug_id}',f'{path}/{project}'])
 
     result=subprocess.run(['mvn','compile'],cwd=f'{path}/{project}')
