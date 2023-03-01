@@ -51,7 +51,7 @@ public class InstrumentationMain {
         List<String> dynamicDirs=new ArrayList<>();
         List<File> libPath=getAllLibraries("/usr/lib/jvm/java-8-openjdk-amd64/jre");
         libPath.addAll(getAllLibraries("/usr/lib/jvm/java-8-openjdk-amd64/lib"));
-        libPath.addAll(getAllLibraries("/root/project/APR-instrumenter/build/classes"));
+        libPath.addAll(getAllLibraries("/root/project/greybox-APR/build/classes"));
         for (File file : libPath) {
             dynamicDirs.add(file.getAbsolutePath());
         }

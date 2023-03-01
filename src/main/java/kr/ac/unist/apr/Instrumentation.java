@@ -15,6 +15,7 @@ import soot.jimple.IfStmt;
 import soot.jimple.InvokeExpr;
 import soot.jimple.Jimple;
 import soot.jimple.LongConstant;
+import soot.jimple.NegExpr;
 import soot.jimple.Stmt;
 import soot.jimple.SwitchStmt;
 import soot.util.Chain;
@@ -23,6 +24,11 @@ public class Instrumentation extends BodyTransformer{
     static final SootClass GLOBAL_CLASS=Scene.v().loadClassAndSupport("kr.ac.unist.apr.GlobalStates");
     static final SootMethod BRANCH_METHOD=GLOBAL_CLASS.getMethod("void setBranchInfo(long)");
     static final SootMethod SAVE_METHOD=GLOBAL_CLASS.getMethod("void saveBranchInfo()");
+
+    static final SootClass SYSTEM_CLASS=Scene.v().loadClassAndSupport("java.lang.System");
+    static final SootMethod ENV_VAR_METHOD=SYSTEM_CLASS.getMethod("java.lang.String getenv(java.lang.String)");
+    static final SootClass STRING_CLASS=Scene.v().loadClassAndSupport("java.lang.String");
+    static final SootMethod STRING_EQUALS_METHOD=STRING_CLASS.getMethod("boolean equals(java.lang.Object)");
 
     @Override
     protected void internalTransform(Body arg0, String arg1, Map<String, String> arg2) {
