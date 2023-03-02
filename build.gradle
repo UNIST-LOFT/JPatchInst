@@ -24,13 +24,12 @@ dependencies {
 
     // This dependency is used by the application.
     implementation 'com.google.guava:guava:30.1.1-jre'
-    implementation 'org.soot-oss:soot:4.1.0'
-    implementation 'org.ow2.asm:asm:8.0.1'
+    implementation 'org.eclipse.jdt:org.eclipse.jdt.core:3.32.0'
 }
 
 application {
     // Define the main class for the application.
-    mainClass = 'kr.ac.unist.apr.InstrumentationMain'
+    mainClass = 'kr.ac.unist.apr.Main'
 }
 
 tasks.named('test') {
@@ -41,6 +40,6 @@ tasks.named('test') {
 shadowJar {
     archiveClassifier.set('')
     manifest {
-        attributes 'Main-Class': 'kr.ac.unist.apr.InstrumentationMain'
+        attributes 'Main-Class': 'kr.ac.unist.apr.Main'
     }
 }
