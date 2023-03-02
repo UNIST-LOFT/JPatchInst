@@ -40,7 +40,7 @@ public class Instrumenter {
      *  Every paths should be absolute.
      * 
      *  Note: This constructor will consume some time, to generate every ASTs for target program.
-     * </p
+     * </p>
      * @param originalFilePath path of original source file of patched file
      * @param patchedFilePath path of patched file
      * @param targetSourcePath path of target program source
@@ -95,5 +95,6 @@ public class Instrumenter {
         }
     }
 
-
+    // TODO: Instrument target program
+    // TODO: Compare original AST and patched AST and instrument
 }

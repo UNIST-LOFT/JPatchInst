@@ -16,6 +16,11 @@ public class Path {
             }
         }
 
+        // Remove classes from this instrumenter
+        for (String source : new ArrayList<>(sources)) {
+            if (source.contains("kr/ac/unist/apr"))
+                sources.remove(source);
+        }
         return sources;
     }
     // TODO: Classpath (e.g. target/dependency) and Sourcepath (e.g. src/main/java)
