@@ -8,12 +8,20 @@ import java.io.IOException;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
 
 import org.eclipse.jdt.core.dom.AST;
 import org.eclipse.jdt.core.dom.ASTNode;
 import org.eclipse.jdt.core.dom.ASTParser;
 
+import com.github.gumtreediff.actions.Diff;
+import com.github.gumtreediff.actions.OnlyRootsClassifier;
+import com.github.gumtreediff.gen.TreeGenerator;
+import com.github.gumtreediff.tree.Tree;
+import com.github.gumtreediff.tree.TreeContext;
+
 import kr.ac.unist.apr.utils.Path;
+import kr.ac.unist.apr.visitor.OriginalSourceVisitor;
 
 /**
  * Main class of instrumentation.
@@ -32,6 +40,8 @@ public class Instrumenter {
     private ASTNode originalRootNode;
     private ASTNode patchedRootNode;
     private List<ASTNode> targetNodes; // this list do not contain patched source
+    private List<ASTNode> originalNodes; // this list do not contain patched source
+    private Map<String,Map<ASTNode,List<Long>>> originalNodeToId;
     /**
      * Default constructor.
      * <p>
@@ -44,6 +54,7 @@ public class Instrumenter {
      * @param originalFilePath path of original source file of patched file
      * @param patchedFilePath path of patched file
      * @param targetSourcePath path of target program source
+     * @param originalSourcePath path of original source of target program
      * @param classPaths class path of target program
      * @param sourcePaths source path of target program
      * @throws IOException if file not found or I/O errors
@@ -51,6 +62,7 @@ public class Instrumenter {
     public Instrumenter(String originalFilePath,
                     String patchedFilePath,
                     String targetSourcePath,
+                    String originalSourcePath,
                     String[] classPaths,
                     String[] sourcePaths) throws IOException {
         this.originalFilePath=originalFilePath;
@@ -60,38 +72,55 @@ public class Instrumenter {
         Map<String, String> options = new HashMap<>();
         options.put("org.eclipse.jdt.core.compiler.source", "1.8");
         options.put("org.eclipse.jdt.core.problem.enablePreviewFeatures", "disabled");
-        ASTParser parser= ASTParser.newParser(new AST(options).apiLevel());
-        parser.setEnvironment(classPaths, sourcePaths, null, true);
-        FileReader originalReader=new FileReader(originalFilePath);
-        BufferedReader originalBufferedReader=new BufferedReader(originalReader);
-        String originalSource="";
-        String line;
-        while ((line=originalBufferedReader.readLine())!=null) {
-            originalSource=originalSource+line+"\n";
+        List<String> allOriginalSources=Path.getAllSources(new File(originalSourcePath));
+        for (String source:allOriginalSources){
+            ASTParser parser= ASTParser.newParser(new AST(options).apiLevel());
+            parser.setEnvironment(classPaths, sourcePaths, null, true);
+            FileReader originalReader=new FileReader(source);
+            BufferedReader originalBufferedReader=new BufferedReader(originalReader);
+            String originalSource="";
+            String line;
+            while ((line=originalBufferedReader.readLine())!=null) {
+                originalSource=originalSource+line+"\n";
+            }
+            originalBufferedReader.close();
+            originalReader.close();
+            parser.setSource(originalSource.toCharArray());
+            ASTNode rootNode=parser.createAST(null);
+            if (source.equals(originalFilePath))
+                originalRootNode = rootNode;
+            else
+                originalNodes.add(rootNode);
+
+            // Visit original source visitor
+            OriginalSourceVisitor originalSourceVisitor=new OriginalSourceVisitor();
+            rootNode.accept(originalSourceVisitor);
+            originalNodeToId.put(source, originalSourceVisitor.getNodeToId());
         }
-        originalBufferedReader.close();
-        originalReader.close();
-        parser.setSource(originalSource.toCharArray());
-        originalRootNode = parser.createAST(null);
 
         // generate AST for patched source
         List<String> allSources=Path.getAllSources(new File(targetSourcePath));
         for (String source:allSources){
-            parser= ASTParser.newParser(new AST(options).apiLevel());
+            ASTParser parser= ASTParser.newParser(new AST(options).apiLevel());
             parser.setEnvironment(classPaths, sourcePaths, null, true);
             FileReader patchedReader=new FileReader(source);
             BufferedReader patchedBufferedReader=new BufferedReader(patchedReader);
             String patchedSource="";
+            String line;
             while ((line=patchedBufferedReader.readLine())!=null) {
                 patchedSource=patchedSource+line+"\n";
             }
             patchedBufferedReader.close();
             patchedReader.close();
             parser.setSource(patchedSource.toCharArray());
-            if(source.equals(patchedFilePath))
-                patchedRootNode = parser.createAST(null);
+            ASTNode rootNode=parser.createAST(null);
+            if(source.equals(patchedFilePath)){
+                patchedRootNode = rootNode;
+                OnlyRootsClassifier classifier = new OnlyRootsClassifier(Diff.compute(originalFilePath, patchedFilePath));
+                Set<Tree> updatedTrees=classifier.getUpdatedDsts();
+            }
             else
-                targetNodes.add(parser.createAST(null));
+                targetNodes.add(rootNode);
         }
     }
 

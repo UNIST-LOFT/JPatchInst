@@ -25,6 +25,7 @@ dependencies {
     // This dependency is used by the application.
     implementation 'com.google.guava:guava:30.1.1-jre'
     implementation 'org.eclipse.jdt:org.eclipse.jdt.core:3.32.0'
+    implementation 'com.github.gumtreediff:core:2.1.2'
 }
 
 application {
