@@ -36,9 +36,9 @@ public class Instrumenter {
     private String patchedFilePath;
     private TreeContext originalRootNode;
     private TreeContext patchedRootNode;
-    private List<TreeContext> targetNodes; // this list do not contain patched source
-    private List<TreeContext> originalNodes; // this list do not contain patched source
-    private Map<String,Map<Node,List<Long>>> originalNodeToId;
+    private Map<String,TreeContext> targetNodes=new HashMap<>(); // this list do not contain patched source
+    private Map<String,TreeContext> originalNodes=new HashMap<>(); // this list do not contain patched source
+    private Map<String,Map<Node,List<Long>>> originalNodeToId=new HashMap<>();
 
     /**
      * Default constructor.
@@ -79,7 +79,7 @@ public class Instrumenter {
             if (source.equals(originalFilePath))
                 originalRootNode = sourceCtxt;
             else
-                originalNodes.add(sourceCtxt);
+                originalNodes.put(source,sourceCtxt);
         }
 
         // generate AST for patched source
@@ -95,11 +95,22 @@ public class Instrumenter {
             if (source.equals(patchedFilePath))
                 patchedRootNode = targetCtxt;
             else
-                targetNodes.add(targetCtxt);
+                targetNodes.put(source,targetCtxt);
         }
     }
     
     public void instrument() throws UnsupportedOperationException, IOException{
+        // Visit original source visitor
+        OriginalSourceVisitor originalSourceVisitor=new OriginalSourceVisitor();
+        originalSourceVisitor.visitPreOrder(originalRootNode.getRoot().getJParserNode());
+        originalNodeToId.put(originalFilePath, originalSourceVisitor.getNodeToId());
+
+        for (Map.Entry<String,TreeContext> originalCtxt:originalNodes.entrySet()){
+            originalSourceVisitor=new OriginalSourceVisitor();
+            originalSourceVisitor.visitPreOrder(originalCtxt.getValue().getRoot().getJParserNode());
+            originalNodeToId.put(originalCtxt.getKey(), originalSourceVisitor.getNodeToId());
+        }
+
         // Instrument patched file
         Matcher matcher = Matchers.getInstance().getMatcher(originalRootNode.getRoot(), patchedRootNode.getRoot());
         matcher.match();
@@ -110,10 +121,5 @@ public class Instrumenter {
         Set<ITree> dstUpdTrees=classifier.getDstUpdTrees();
         Set<ITree> srcMvTrees=classifier.getSrcMvTrees();
         Set<ITree> dstMvTrees=classifier.getDstMvTrees();
-
-        // Visit original source visitor
-        OriginalSourceVisitor originalSourceVisitor=new OriginalSourceVisitor();
-        originalSourceVisitor.visitPreOrder(originalRootNode.getRoot().getJParserNode());
-        originalNodeToId.put(originalFilePath, originalSourceVisitor.getNodeToId());
     }
 }
