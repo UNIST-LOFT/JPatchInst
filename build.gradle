@@ -20,12 +20,13 @@ repositories {
 
 dependencies {
     // Use JUnit Jupiter for testing.
-    testImplementation 'org.junit.jupiter:junit-jupiter:5.7.2'
+    testImplementation 'org.junit.jupiter:junit-jupiter:5.7.1'
 
     // This dependency is used by the application.
     implementation 'com.google.guava:guava:30.1.1-jre'
-    implementation 'org.eclipse.jdt:org.eclipse.jdt.core:3.32.0'
-    implementation 'com.github.gumtreediff:core:2.1.2'
+    implementation files('libs/gumtree-all.jar')
+    implementation 'com.github.javaparser:javaparser-symbol-solver-core:3.25.1'
+    implementation 'com.github.javaparser:javaparser-core:3.25.1'
 }
 
 application {
