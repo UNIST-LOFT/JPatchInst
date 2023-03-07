@@ -3,6 +3,7 @@ package kr.ac.unist.apr;
 import java.io.BufferedReader;
 import java.io.File;
 import java.io.FileReader;
+import java.io.FileWriter;
 import java.io.IOException;
 import java.util.HashMap;
 import java.util.List;
@@ -19,6 +20,7 @@ import com.github.javaparser.ast.Node;
 import kr.ac.unist.apr.gumtree.MyRootsClassifier;
 import kr.ac.unist.apr.utils.Path;
 import kr.ac.unist.apr.visitor.OriginalSourceVisitor;
+import kr.ac.unist.apr.visitor.TargetSourceVisitor;
 
 /**
  * Main class of instrumentation.
@@ -101,6 +103,7 @@ public class Instrumenter {
     
     public void instrument() throws UnsupportedOperationException, IOException{
         // Visit original source visitor
+        // TODO: Cache/load this result with file
         OriginalSourceVisitor originalSourceVisitor=new OriginalSourceVisitor();
         originalSourceVisitor.visitPreOrder(originalRootNode.getRoot().getJParserNode());
         originalNodeToId.put(originalFilePath, originalSourceVisitor.getNodeToId());
@@ -109,6 +112,18 @@ public class Instrumenter {
             originalSourceVisitor=new OriginalSourceVisitor();
             originalSourceVisitor.visitPreOrder(originalCtxt.getValue().getRoot().getJParserNode());
             originalNodeToId.put(originalCtxt.getKey(), originalSourceVisitor.getNodeToId());
+        }
+
+        // Instrument target program without patched file
+        for (Map.Entry<String,TreeContext> targetCtxt:targetNodes.entrySet()){
+            TargetSourceVisitor instrumenterVisitor=new TargetSourceVisitor(originalNodeToId.get(targetCtxt.getKey()));
+            Node targetNode=targetCtxt.getValue().getRoot().getJParserNode();
+            instrumenterVisitor.visitPreOrder(targetNode);
+            
+            // Save instrumented file
+            FileWriter writer = new FileWriter(targetCtxt.getKey());
+            writer.write(targetNode.toString());
+            writer.close();
         }
 
         // Instrument patched file
