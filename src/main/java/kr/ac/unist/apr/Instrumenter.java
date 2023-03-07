@@ -5,6 +5,7 @@ import java.io.File;
 import java.io.FileReader;
 import java.io.FileWriter;
 import java.io.IOException;
+import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
@@ -20,7 +21,9 @@ import com.github.javaparser.ast.Node;
 import kr.ac.unist.apr.gumtree.MyRootsClassifier;
 import kr.ac.unist.apr.utils.Path;
 import kr.ac.unist.apr.visitor.OriginalSourceVisitor;
+import kr.ac.unist.apr.visitor.PatchedSourceVisitor;
 import kr.ac.unist.apr.visitor.TargetSourceVisitor;
+import kr.ac.unist.apr.visitor.PatchedSourceVisitor.DiffType;
 
 /**
  * Main class of instrumentation.
@@ -115,6 +118,7 @@ public class Instrumenter {
         }
 
         // Instrument target program without patched file
+        // TODO: Skip already instrumented file
         for (Map.Entry<String,TreeContext> targetCtxt:targetNodes.entrySet()){
             TargetSourceVisitor instrumenterVisitor=new TargetSourceVisitor(originalNodeToId.get(targetCtxt.getKey()));
             Node targetNode=targetCtxt.getValue().getRoot().getJParserNode();
@@ -126,7 +130,7 @@ public class Instrumenter {
             writer.close();
         }
 
-        // Instrument patched file
+        // Get differences between original source and patched source
         Matcher matcher = Matchers.getInstance().getMatcher(originalRootNode.getRoot(), patchedRootNode.getRoot());
         matcher.match();
         MyRootsClassifier classifier = new MyRootsClassifier(originalRootNode,patchedRootNode,matcher);
@@ -136,5 +140,57 @@ public class Instrumenter {
         Set<ITree> dstUpdTrees=classifier.getDstUpdTrees();
         Set<ITree> srcMvTrees=classifier.getSrcMvTrees();
         Set<ITree> dstMvTrees=classifier.getDstMvTrees();
+        dstAddTrees=removeDuplicateNode(dstAddTrees);
+        srcDelTrees=removeDuplicateNode(srcDelTrees);
+        srcUpdTrees=removeDuplicateNode(srcUpdTrees);
+        dstUpdTrees=removeDuplicateNode(dstUpdTrees);
+        srcMvTrees=removeDuplicateNode(srcMvTrees);
+        dstMvTrees=removeDuplicateNode(dstMvTrees);
+
+        Map<DiffType,List<Node>> diffMap=new HashMap<>();
+        ArrayList<Node> dstAddList=new ArrayList<>();
+        for (ITree tree:dstAddTrees)
+            dstAddList.add(tree.getJParserNode());
+        diffMap.put(DiffType.INSERT, dstAddList);
+
+        ArrayList<Node> srcDelList=new ArrayList<>();
+        for (ITree tree:srcDelTrees)
+            srcDelList.add(tree.getJParserNode());
+        diffMap.put(DiffType.DELETE, srcDelList);
+
+        ArrayList<Node> srcUpdList=new ArrayList<>();
+        for (ITree tree:srcUpdTrees)
+            srcUpdList.add(tree.getJParserNode());
+        diffMap.put(DiffType.UPDATE_ORIG, srcUpdList);
+
+        ArrayList<Node> dstUpdList=new ArrayList<>();
+        for (ITree tree:dstUpdTrees)
+            dstUpdList.add(tree.getJParserNode());
+        diffMap.put(DiffType.UPDATE_PATCH, dstUpdList);
+
+        ArrayList<Node> srcMvList=new ArrayList<>();
+        for (ITree tree:srcMvTrees)
+            srcMvList.add(tree.getJParserNode());
+        diffMap.put(DiffType.MOVE_ORIG, srcMvList);
+
+        ArrayList<Node> dstMvList=new ArrayList<>();
+        for (ITree tree:dstMvTrees)
+            dstMvList.add(tree.getJParserNode());
+        diffMap.put(DiffType.MOVE_PATCH, dstMvList);
+
+        // Instrument patched file
+        PatchedSourceVisitor patchVisitor=new PatchedSourceVisitor(originalNodeToId.get(patchedFilePath),diffMap);
+        patchVisitor.visitPreOrder(patchedRootNode.getRoot().getJParserNode());
+    }
+
+    private Set<ITree> removeDuplicateNode(Set<ITree> trees){
+        Set<ITree> result=trees;
+        for (ITree tree:trees){
+            for (ITree target:trees){
+                if (target.getJParserNode().isAncestorOf(tree.getJParserNode()) && !target.equals(tree))
+                    result.remove(tree);
+            }
+        }
+        return result;
     }
 }

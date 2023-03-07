@@ -75,7 +75,6 @@ public class TargetSourceVisitor extends TreeVisitor {
             ForStmt forStmt=(ForStmt)stmt;
             Optional<Expression> condition=forStmt.getCompare();
 
-            // TODO: Handle for statement without condition and infinite loop
             // We assume that the condition is not false literal
             if (condition.isPresent() && !(condition.get() instanceof BooleanLiteralExpr)){
                 MethodCallExpr wrapper=genConditionWrapper(condition.get(),forStmt);
@@ -87,7 +86,6 @@ public class TargetSourceVisitor extends TreeVisitor {
             WhileStmt whileStmt=(WhileStmt)stmt;
             Expression condition=whileStmt.getCondition();
 
-            // TODO: Handle infinite loop
             // We assume that the condition is not false literal
             if (!(condition instanceof BooleanLiteralExpr)){
                 MethodCallExpr wrapper=genConditionWrapper(condition,whileStmt);
@@ -99,7 +97,6 @@ public class TargetSourceVisitor extends TreeVisitor {
             DoStmt doStmt=(DoStmt)stmt;
             Expression condition=doStmt.getCondition();
 
-            // TODO: Handle infinite loop
             // We assume that the condition is not false literal
             if (!(condition instanceof BooleanLiteralExpr)){
                 MethodCallExpr wrapper=genConditionWrapper(condition,doStmt);
