@@ -14,6 +14,11 @@ import java.util.Map;
  * @author Youngjae Kim
  */
 public class GlobalStates {
+  public static final String STATE_CLASS_NAME="kr.ac.unist.apr.GlobalStates";
+  public static final String STATE_COND_METHOD="wrapConditionExpr";
+  public static final String STATE_BRANCH_METHOD="setBranchInfo";
+  public static final String STATE_SAVE_INFO="saveBranchInfo";
+  
   /**
    * The executed branch ID in previous. Used for calculate current ID.
    */

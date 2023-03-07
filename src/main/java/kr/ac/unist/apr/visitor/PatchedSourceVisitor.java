@@ -18,8 +18,9 @@ public class PatchedSourceVisitor extends TreeVisitor {
     
     @Override
     public void process(Node node) {
-        // TODO Auto-generated method stub
-        throw new UnsupportedOperationException("Unimplemented method 'process'");
+        // TODO Implements instrumentation with handling patch
+        // Tip: NoCommentEqualsVisitor to check if the node is same
+        // Tip: CompilationUnit.getImports() to check if this AST is already instrumented
     }
     
     public static enum DiffType {
