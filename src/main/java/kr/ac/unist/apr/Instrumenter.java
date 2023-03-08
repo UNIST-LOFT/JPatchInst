@@ -160,6 +160,8 @@ public class Instrumenter {
 
         assert dstAddSet.size()<=1 && srcDelSet.size()<=1 && srcUpdSet.size()<=1 && dstUpdSet.size()<=1 && srcMvSet.size()<=1 && dstMvSet.size()<=1;
 
+        Node ignoreNode=null;
+
         Main.LOGGER.log(Level.INFO, "GumTreeJP finished, parsing results...");
         if (dstAddSet.size()!=0 && srcMvSet.size()!=0){
             // Convert insertion+move to update
@@ -258,7 +260,15 @@ public class Instrumenter {
             result.add(tree.getJParserNode());
         }
 
-        return result;
+        List<Node> finalResult=new ArrayList<>();
+        for (Node node:result){
+            Node curNode=node;
+            while (!(curNode instanceof Statement))
+                curNode=curNode.getParentNode().get();
+            finalResult.add(curNode);
+        }
+
+        return finalResult;
     }
 
     protected Pair<ModifiedNode,ModifiedNode> revertMove(Node movedFromOriginal,Node movedToPatch) {
@@ -412,8 +422,8 @@ public class Instrumenter {
         }
         else if (beforeNode instanceof Statement){
             // Update normal statement
-            Node curBefore=beforeNode.getParentNode().get();
-            Node curAfter=afteNode.getParentNode().get();
+            Node curBefore=beforeNode;
+            Node curAfter=afteNode;
             while (!(curBefore.getParentNode().get() instanceof BlockStmt)){
                 curBefore=curBefore.getParentNode().get();
                 curAfter=curAfter.getParentNode().get();
@@ -542,7 +552,7 @@ public class Instrumenter {
             int indexBefore=beforeUpdated.index;
             int indexAfter=afterUpdated.index;
             assert indexBefore==indexAfter;
-            blockAfter.getStatements().set(indexAfter, (Statement)afterUpdated.beforeNode);
+            blockAfter.getStatements().set(indexAfter, (Statement)afterUpdated.node);
         }
         else {
             throw new RuntimeException("RevertUpdateVisitor can only handle VariableDeclarator or Statement.");
