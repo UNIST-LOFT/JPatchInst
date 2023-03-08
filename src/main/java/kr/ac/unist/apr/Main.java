@@ -7,8 +7,8 @@ import java.util.logging.Logger;
 public class Main {
     public static final Logger LOGGER=Logger.getGlobal();
     public static void main(String[] args) {
-        if (args.length!=3) {
-            System.out.println("Usage: java -jar apr.jar <project> <patchedFilePath> <originalFilePath>");
+        if (args.length!=5) {
+            System.out.println("Usage: java -jar JPatchInst.jar <original_file> <patched_file> <original_source_path> <target_source_path> <class_path>");
             System.exit(1);
         }
         

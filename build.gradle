@@ -29,6 +29,9 @@ dependencies {
     implementation 'com.github.javaparser:javaparser-core:3.25.1'
 }
 
+sourceCompatibility = 1.8
+targetCompatibility = 1.8
+
 application {
     // Define the main class for the application.
     mainClass = 'kr.ac.unist.apr.Main'
