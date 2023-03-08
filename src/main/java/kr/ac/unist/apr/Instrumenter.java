@@ -10,6 +10,7 @@ import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
+import java.util.logging.Level;
 
 import com.github.gumtreediff.gen.javaparser.JavaParserGenerator;
 import com.github.gumtreediff.matchers.Matcher;
@@ -76,6 +77,7 @@ public class Instrumenter {
         this.originalFilePath=originalFilePath;
         this.patchedFilePath=patchedFilePath;
 
+        Main.LOGGER.log(Level.INFO, "Generate AST for original source...");
         // generate AST for original source
         List<String> allOriginalSources=Path.getAllSources(new File(originalSourcePath));
         for (String source:allOriginalSources){
@@ -92,6 +94,7 @@ public class Instrumenter {
                 originalNodes.put(source,sourceCtxt);
         }
 
+        Main.LOGGER.log(Level.INFO, "Generate AST for target source...");
         // generate AST for patched source
         List<String> allSources=Path.getAllSources(new File(targetSourcePath));
         for (String source:allSources){
@@ -112,6 +115,7 @@ public class Instrumenter {
     public void instrument() throws UnsupportedOperationException, IOException{
         // Visit original source visitor
         // TODO: Cache/load this result with file
+        Main.LOGGER.log(Level.INFO, "Gen IDs from original ASTs...");
         OriginalSourceVisitor originalSourceVisitor=new OriginalSourceVisitor();
         originalSourceVisitor.visitPreOrder(originalRootNode.getRoot().getJParserNode());
         originalNodeToId.put(originalFilePath, originalSourceVisitor.getNodeToId());
@@ -124,6 +128,7 @@ public class Instrumenter {
 
         // Instrument target program without patched file
         // TODO: Skip already instrumented file
+        Main.LOGGER.log(Level.INFO, "Instrument target program except patched file...");
         for (Map.Entry<String,TreeContext> targetCtxt:targetNodes.entrySet()){
             TargetSourceVisitor instrumenterVisitor=new TargetSourceVisitor(originalNodeToId.get(targetCtxt.getKey()));
             Node targetNode=targetCtxt.getValue().getRoot().getJParserNode();
@@ -136,6 +141,7 @@ public class Instrumenter {
         }
 
         // Get differences between original source and patched source
+        Main.LOGGER.log(Level.INFO, "Run GumTreeJP...");
         Matcher matcher = Matchers.getInstance().getMatcher(originalRootNode.getRoot(), patchedRootNode.getRoot());
         matcher.match();
         MyRootsClassifier classifier = new MyRootsClassifier(originalRootNode,patchedRootNode,matcher);
@@ -154,6 +160,7 @@ public class Instrumenter {
 
         assert dstAddSet.size()<=1 && srcDelSet.size()<=1 && srcUpdSet.size()<=1 && dstUpdSet.size()<=1 && srcMvSet.size()<=1 && dstMvSet.size()<=1;
 
+        Main.LOGGER.log(Level.INFO, "GumTreeJP finished, parsing results...");
         if (dstAddSet.size()!=0 && srcMvSet.size()!=0){
             // Convert insertion+move to update
             for (Node node:new ArrayList<>(dstAddSet)){
@@ -179,28 +186,35 @@ public class Instrumenter {
             }
         }
 
+        Main.LOGGER.log(Level.INFO, "Reverts original and patched ASTs to instrument...");
         ModifiedNode modifiedNode=null;
         Pair<ModifiedNode,ModifiedNode> updatedNode=null;
         if (dstAddSet.size()>0){
             assert dstAddSet.size()==1;
+            Main.LOGGER.log(Level.INFO, "Insertion found!");
             modifiedNode=revertInsertion(dstAddSet.get(0));
         }
         else if (srcDelSet.size()>0){
             assert srcDelSet.size()==1;
+            Main.LOGGER.log(Level.INFO, "Deletion found!");
             modifiedNode=revertRemoval(srcDelSet.get(0));
         }
         else if (srcUpdSet.size()>0){
             assert srcUpdSet.size()==1;
+            Main.LOGGER.log(Level.INFO, "Update found!");
             updatedNode=revertUpdate(srcUpdSet.get(0),dstUpdSet.get(0));
         }
         else if (srcMvSet.size()>0){
             assert srcMvSet.size()==1;
+            Main.LOGGER.log(Level.INFO, "Move found!");
             updatedNode=revertMove(srcMvSet.get(0),dstMvSet.get(0));
         }
 
+        Main.LOGGER.log(Level.INFO, "Instrument patched file...");
         PatchedSourceVisitor patchedSourceVisitor=new PatchedSourceVisitor(originalNodeToId.get(originalFilePath));
         patchedSourceVisitor.visitPreOrder(patchedRootNode.getRoot().getJParserNode());
         
+        Main.LOGGER.log(Level.INFO, "Roll back reverted ASTs...");
         if (dstAddSet.size()>0){
             assert dstAddSet.size()==1;
             rollbackInsertion(modifiedNode);
@@ -218,6 +232,7 @@ public class Instrumenter {
             rollbackMove(updatedNode);
         }
 
+        Main.LOGGER.log(Level.INFO, "Save patched file...");
         // Save patched file
         FileWriter writer = new FileWriter(patchedFilePath);
         writer.write(patchedRootNode.getRoot().getJParserNode().toString());
