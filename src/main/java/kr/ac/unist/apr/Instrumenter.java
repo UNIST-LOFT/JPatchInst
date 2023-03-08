@@ -17,13 +17,20 @@ import com.github.gumtreediff.matchers.Matchers;
 import com.github.gumtreediff.tree.ITree;
 import com.github.gumtreediff.tree.TreeContext;
 import com.github.javaparser.ast.Node;
+import com.github.javaparser.ast.body.FieldDeclaration;
+import com.github.javaparser.ast.body.MethodDeclaration;
+import com.github.javaparser.ast.body.TypeDeclaration;
+import com.github.javaparser.ast.body.VariableDeclarator;
+import com.github.javaparser.ast.expr.VariableDeclarationExpr;
+import com.github.javaparser.ast.stmt.BlockStmt;
+import com.github.javaparser.ast.stmt.Statement;
+import com.github.javaparser.utils.Pair;
 
 import kr.ac.unist.apr.gumtree.MyRootsClassifier;
 import kr.ac.unist.apr.utils.Path;
 import kr.ac.unist.apr.visitor.OriginalSourceVisitor;
 import kr.ac.unist.apr.visitor.PatchedSourceVisitor;
 import kr.ac.unist.apr.visitor.TargetSourceVisitor;
-import kr.ac.unist.apr.visitor.PatchedSourceVisitor.DiffType;
 
 /**
  * Main class of instrumentation.
@@ -59,15 +66,13 @@ public class Instrumenter {
      * @param targetSourcePath path of target program source
      * @param originalSourcePath path of original source of target program
      * @param classPaths class path of target program
-     * @param sourcePaths source path of target program
      * @throws IOException if file not found or I/O errors
      */
     public Instrumenter(String originalFilePath,
                     String patchedFilePath,
                     String targetSourcePath,
                     String originalSourcePath,
-                    String[] classPaths,
-                    String[] sourcePaths) throws IOException {
+                    String[] classPaths) throws IOException {
         this.originalFilePath=originalFilePath;
         this.patchedFilePath=patchedFilePath;
 
@@ -140,57 +145,394 @@ public class Instrumenter {
         Set<ITree> dstUpdTrees=classifier.getDstUpdTrees();
         Set<ITree> srcMvTrees=classifier.getSrcMvTrees();
         Set<ITree> dstMvTrees=classifier.getDstMvTrees();
-        dstAddTrees=removeDuplicateNode(dstAddTrees);
-        srcDelTrees=removeDuplicateNode(srcDelTrees);
-        srcUpdTrees=removeDuplicateNode(srcUpdTrees);
-        dstUpdTrees=removeDuplicateNode(dstUpdTrees);
-        srcMvTrees=removeDuplicateNode(srcMvTrees);
-        dstMvTrees=removeDuplicateNode(dstMvTrees);
+        List<Node> dstAddSet=convertNodes(dstAddTrees);
+        List<Node> srcDelSet=convertNodes(srcDelTrees);
+        List<Node> srcUpdSet=convertNodes(srcUpdTrees);
+        List<Node> dstUpdSet=convertNodes(dstUpdTrees);
+        List<Node> srcMvSet=convertNodes(srcMvTrees);
+        List<Node> dstMvSet=convertNodes(dstMvTrees);
 
-        Map<DiffType,List<Node>> diffMap=new HashMap<>();
-        ArrayList<Node> dstAddList=new ArrayList<>();
-        for (ITree tree:dstAddTrees)
-            dstAddList.add(tree.getJParserNode());
-        diffMap.put(DiffType.INSERT, dstAddList);
+        assert dstAddSet.size()<=1 && srcDelSet.size()<=1 && srcUpdSet.size()<=1 && dstUpdSet.size()<=1 && srcMvSet.size()<=1 && dstMvSet.size()<=1;
 
-        ArrayList<Node> srcDelList=new ArrayList<>();
-        for (ITree tree:srcDelTrees)
-            srcDelList.add(tree.getJParserNode());
-        diffMap.put(DiffType.DELETE, srcDelList);
+        if (dstAddSet.size()!=0 && srcMvSet.size()!=0){
+            // Convert insertion+move to update
+            for (Node node:new ArrayList<>(dstAddSet)){
+                dstAddSet.clear();
+                Node origNode=srcMvSet.get(0);
+                srcMvSet.clear();
+                dstMvSet.clear();
 
-        ArrayList<Node> srcUpdList=new ArrayList<>();
-        for (ITree tree:srcUpdTrees)
-            srcUpdList.add(tree.getJParserNode());
-        diffMap.put(DiffType.UPDATE_ORIG, srcUpdList);
-
-        ArrayList<Node> dstUpdList=new ArrayList<>();
-        for (ITree tree:dstUpdTrees)
-            dstUpdList.add(tree.getJParserNode());
-        diffMap.put(DiffType.UPDATE_PATCH, dstUpdList);
-
-        ArrayList<Node> srcMvList=new ArrayList<>();
-        for (ITree tree:srcMvTrees)
-            srcMvList.add(tree.getJParserNode());
-        diffMap.put(DiffType.MOVE_ORIG, srcMvList);
-
-        ArrayList<Node> dstMvList=new ArrayList<>();
-        for (ITree tree:dstMvTrees)
-            dstMvList.add(tree.getJParserNode());
-        diffMap.put(DiffType.MOVE_PATCH, dstMvList);
-
-        // Instrument patched file
-        PatchedSourceVisitor patchVisitor=new PatchedSourceVisitor(originalNodeToId.get(patchedFilePath),diffMap);
-        patchVisitor.visitPreOrder(patchedRootNode.getRoot().getJParserNode());
-    }
-
-    private Set<ITree> removeDuplicateNode(Set<ITree> trees){
-        Set<ITree> result=trees;
-        for (ITree tree:trees){
-            for (ITree target:trees){
-                if (target.getJParserNode().isAncestorOf(tree.getJParserNode()) && !target.equals(tree))
-                    result.remove(tree);
+                srcUpdSet.add(origNode);
+                dstUpdSet.add(node);
             }
         }
+        else if (srcDelSet.size()!=0 && dstMvSet.size()!=0){
+            // Convert deletion+move to update
+            for (Node node:new ArrayList<>(srcDelSet)){
+                srcDelSet.clear();
+                Node origNode=dstMvSet.get(0);
+                srcMvSet.clear();
+                dstMvSet.clear();
+
+                srcUpdSet.add(node);
+                dstUpdSet.add(origNode);
+            }
+        }
+
+        ModifiedNode modifiedNode=null;
+        Pair<ModifiedNode,ModifiedNode> updatedNode=null;
+        if (dstAddSet.size()>0){
+            assert dstAddSet.size()==1;
+            modifiedNode=revertInsertion(dstAddSet.get(0));
+        }
+        else if (srcDelSet.size()>0){
+            assert srcDelSet.size()==1;
+            modifiedNode=revertRemoval(srcDelSet.get(0));
+        }
+        else if (srcUpdSet.size()>0){
+            assert srcUpdSet.size()==1;
+            updatedNode=revertUpdate(srcUpdSet.get(0),dstUpdSet.get(0));
+        }
+        else if (srcMvSet.size()>0){
+            assert srcMvSet.size()==1;
+            updatedNode=revertMove(srcMvSet.get(0),dstMvSet.get(0));
+        }
+
+        PatchedSourceVisitor patchedSourceVisitor=new PatchedSourceVisitor(originalNodeToId.get(originalFilePath));
+        patchedSourceVisitor.visitPreOrder(patchedRootNode.getRoot().getJParserNode());
+        
+        if (dstAddSet.size()>0){
+            assert dstAddSet.size()==1;
+            rollbackInsertion(modifiedNode);
+        }
+        else if (srcDelSet.size()>0){
+            assert srcDelSet.size()==1;
+            rollbackRemoval(modifiedNode);
+        }
+        else if (srcUpdSet.size()>0){
+            assert srcUpdSet.size()==1;
+            rollbackUpdate(updatedNode);
+        }
+        else if (srcMvSet.size()>0){
+            assert srcMvSet.size()==1;
+            rollbackMove(updatedNode);
+        }
+
+        // Save patched file
+        FileWriter writer = new FileWriter(patchedFilePath);
+        writer.write(patchedRootNode.getRoot().getJParserNode().toString());
+        writer.close();
+    }
+
+    static class ModifiedNode {
+        Node node;
+        int index;
+        Node parent;
+        Node beforeNode;
+        public ModifiedNode(Node node, int index, Node parent,Node beforeNode) {
+            this.node = node;
+            this.index = index;
+            this.parent = parent;
+            this.beforeNode=beforeNode;
+        }
+    }
+
+    private List<Node> convertNodes(Set<ITree> trees){
+        List<Node> result=new ArrayList<>();
+        for (ITree tree:trees){
+            result.add(tree.getJParserNode());
+        }
+
         return result;
     }
+
+    protected Pair<ModifiedNode,ModifiedNode> revertMove(Node movedFromOriginal,Node movedToPatch) {
+        if (movedFromOriginal.getParentNode().get() instanceof BlockStmt &&
+                        movedToPatch.getParentNode().get() instanceof BlockStmt){
+            // A node is moved from a block to another block.
+            BlockStmt blockFrom=(BlockStmt)movedFromOriginal.getParentNode().get();
+            BlockStmt blockTo=(BlockStmt)movedToPatch.getParentNode().get();
+
+            int indexFrom=blockFrom.getStatements().indexOf(movedFromOriginal);
+            int indexTo=blockTo.getStatements().indexOf(movedToPatch);
+
+            blockFrom.getStatements().remove(movedFromOriginal);
+            blockTo.getStatements().remove(movedToPatch);
+
+            ModifiedNode beforeNode,afterNode;
+            if (indexFrom==0){
+                beforeNode=new ModifiedNode(movedFromOriginal,indexFrom,blockFrom,null);
+            }
+            else{
+                beforeNode=new ModifiedNode(movedFromOriginal,indexFrom,blockFrom,blockFrom.getStatements().get(indexFrom-1));
+            }
+
+            if (indexTo==0){
+                afterNode=new ModifiedNode(movedToPatch,indexTo,blockTo,null);
+            }
+            else{
+                afterNode=new ModifiedNode(movedToPatch,indexTo,blockTo,blockTo.getStatements().get(indexTo-1));
+            }
+
+            return new Pair<Instrumenter.ModifiedNode,Instrumenter.ModifiedNode>(afterNode, beforeNode);
+        }
+        else{
+            throw new RuntimeException("RevertMoveVisitor can only handle statement that moved in BlockStmt.");
+        }
+    }
+
+    protected ModifiedNode revertRemoval(Node removedNode) {
+        if (removedNode instanceof MethodDeclaration){
+            // Removal method declaration
+            if (!(removedNode.getParentNode().get() instanceof TypeDeclaration)){
+                throw new RuntimeException("RevertRemoveVisitor can only handle MethodDecl that removed in Class/Interface Dec.");
+            }
+
+            TypeDeclaration typeDecl=(TypeDeclaration)removedNode.getParentNode().get();
+            int index=typeDecl.getMembers().indexOf(removedNode);
+            typeDecl.getMembers().remove(removedNode);
+            ModifiedNode modifiedNode;
+            if (index==0){
+                modifiedNode=new ModifiedNode(removedNode,index,typeDecl,null);
+            }
+            else{
+                modifiedNode=new ModifiedNode(removedNode,index,typeDecl,typeDecl.getMembers().get(index-1));
+            }
+
+            return modifiedNode;
+        }
+        else{
+            // Removal statement
+            if (!(removedNode instanceof Statement)){
+                throw new RuntimeException("Inserted node should be Statement.");
+            }
+            if (!(removedNode.getParentNode().get() instanceof BlockStmt)) {
+                throw new RuntimeException("RevertInsertionVisitor can only handle statement that inserted in BlockStmt.");
+            }
+
+            BlockStmt block=(BlockStmt)removedNode.getParentNode().get();
+            int index=block.getStatements().indexOf(removedNode);
+            block.getStatements().remove(removedNode);
+            ModifiedNode modifiedNode;
+            if (index==0){
+                modifiedNode=new ModifiedNode(removedNode,index,block,null);
+            }
+            else{
+                modifiedNode=new ModifiedNode(removedNode,index,block,block.getStatements().get(index-1));
+            }
+            return modifiedNode;
+        }
+    }
+
+    protected ModifiedNode revertInsertion(Node insertedNode) {
+        if (!(insertedNode instanceof Statement)){
+            throw new RuntimeException("Inserted node should be Statement.");
+        }
+        if (!(insertedNode.getParentNode().get() instanceof BlockStmt)) {
+            throw new RuntimeException("RevertInsertionVisitor can only handle statement that inserted in BlockStmt.");
+        }
+
+        BlockStmt block=(BlockStmt)insertedNode.getParentNode().get();
+        int index=block.getStatements().indexOf(insertedNode);
+        block.getStatements().remove(insertedNode);
+        ModifiedNode modifiedNode;
+        if (index==0){
+            modifiedNode=new ModifiedNode(insertedNode,index,block,null);
+        }
+        else{
+            modifiedNode=new ModifiedNode(insertedNode,index,block,block.getStatements().get(index-1));
+        }
+        return modifiedNode;
+    }
+
+    protected Pair<ModifiedNode,ModifiedNode> revertUpdate(Node beforeNode,Node afteNode) {
+        if (beforeNode instanceof VariableDeclarator){
+            // Update field or variable declaration
+            if (!(beforeNode.getParentNode().get() instanceof FieldDeclaration || beforeNode.getParentNode().get() instanceof VariableDeclarationExpr) ||
+                            !(afteNode.getParentNode().get() instanceof TypeDeclaration || afteNode.getParentNode().get() instanceof VariableDeclarationExpr)){
+                throw new RuntimeException("Can only handle update field or variable declaration.");
+            }
+
+            if (beforeNode.getParentNode().get() instanceof FieldDeclaration){
+                VariableDeclarator fieldBefore=(VariableDeclarator)beforeNode;
+                VariableDeclarator fieldAfter=(VariableDeclarator)afteNode;
+                VariableDeclarator fieldBeforeClone=fieldBefore.clone();
+                VariableDeclarator fieldAfterClone=fieldAfter.clone();
+                fieldBeforeClone.removeInitializer();
+                fieldAfterClone.removeInitializer();
+
+                FieldDeclaration fieldDeclBefore=(FieldDeclaration)beforeNode.getParentNode().get();
+                FieldDeclaration fieldDeclAfter=(FieldDeclaration)afteNode.getParentNode().get();
+                int indexBefore=fieldDeclBefore.getVariables().indexOf(fieldBefore);
+                int indexAfter=fieldDeclAfter.getVariables().indexOf(fieldAfter);
+                fieldDeclBefore.getVariables().set(indexBefore, fieldBeforeClone);
+                fieldDeclAfter.getVariables().set(indexAfter, fieldAfterClone);
+
+                ModifiedNode beforeModified=new ModifiedNode(fieldBeforeClone,indexBefore,fieldDeclBefore,fieldBefore);
+                ModifiedNode afterModified=new ModifiedNode(fieldAfterClone,indexAfter,fieldDeclAfter,fieldAfter);
+                return new Pair<ModifiedNode,ModifiedNode>(beforeModified, afterModified);
+            }
+            else if (beforeNode.getParentNode().get() instanceof VariableDeclarationExpr){
+                VariableDeclarator varBefore=(VariableDeclarator)beforeNode;
+                VariableDeclarator varAfter=(VariableDeclarator)afteNode;
+                VariableDeclarator varBeforeClone=varBefore.clone();
+                VariableDeclarator varAfterClone=varAfter.clone();
+                varBeforeClone.removeInitializer();
+                varAfterClone.removeInitializer();
+
+                VariableDeclarationExpr varDeclBefore=(VariableDeclarationExpr)beforeNode.getParentNode().get();
+                VariableDeclarationExpr varDeclAfter=(VariableDeclarationExpr)afteNode.getParentNode().get();
+                int indexBefore=varDeclBefore.getVariables().indexOf(varBefore);
+                int indexAfter=varDeclAfter.getVariables().indexOf(varAfter);
+                varDeclBefore.getVariables().set(indexBefore, varBeforeClone);
+                varDeclAfter.getVariables().set(indexAfter, varAfterClone);
+
+                ModifiedNode beforeModified=new ModifiedNode(varBeforeClone,indexBefore,varDeclBefore,varBefore);
+                ModifiedNode afterModified=new ModifiedNode(varAfterClone,indexAfter,varDeclAfter,varAfter);
+                return new Pair<ModifiedNode,ModifiedNode>(beforeModified, afterModified);
+            }
+            else{
+                throw new RuntimeException("RevertUpdateVisitor can only handle VariableDeclarator that updated in FieldDecl or VarDecl.");
+            }
+        }
+        else if (beforeNode instanceof Statement){
+            // Update normal statement
+            Node curBefore=beforeNode.getParentNode().get();
+            Node curAfter=afteNode.getParentNode().get();
+            while (!(curBefore.getParentNode().get() instanceof BlockStmt)){
+                curBefore=curBefore.getParentNode().get();
+                curAfter=curAfter.getParentNode().get();
+            }
+            assert curAfter.getParentNode().get() instanceof BlockStmt;
+
+            BlockStmt blockBefore=(BlockStmt)curBefore.getParentNode().get();
+            BlockStmt blockAfter=(BlockStmt)curAfter.getParentNode().get();
+            int indexBefore=blockBefore.getStatements().indexOf(curBefore);
+            int indexAfter=blockAfter.getStatements().indexOf(curAfter);
+            assert indexBefore==indexAfter;
+            blockAfter.getStatements().set(indexAfter, (Statement)curBefore.clone());
+
+            ModifiedNode beforeModified=new ModifiedNode(curBefore,indexBefore,blockBefore,blockBefore.getStatements().get(indexBefore));
+            ModifiedNode afterModified=new ModifiedNode(curAfter,indexAfter,blockAfter,blockAfter.getStatements().get(indexAfter));
+            return new Pair<ModifiedNode,ModifiedNode>(beforeModified, afterModified);
+        }
+        else {
+            throw new RuntimeException("RevertUpdateVisitor can only handle VariableDeclarator or Statement.");
+        }
+    }
+
+    protected void rollbackMove(Pair<ModifiedNode,ModifiedNode> movedInfos) {
+        // A node is moved from a block to another block.
+        ModifiedNode beforeMoved=movedInfos.a;
+        ModifiedNode afterMoved=movedInfos.b;
+        BlockStmt blockFrom=(BlockStmt)beforeMoved.parent;
+        BlockStmt blockTo=(BlockStmt)afterMoved.parent;
+
+        if (beforeMoved.index==0){
+            blockFrom.getStatements().addFirst((Statement)beforeMoved.node);
+        }
+        else{
+            blockFrom.getStatements().addAfter((Statement)beforeMoved.node, (Statement)beforeMoved.beforeNode);
+        }
+        
+        if (afterMoved.index==0)
+            blockTo.getStatements().addFirst((Statement)afterMoved.node);
+        else
+            blockTo.getStatements().addAfter((Statement)afterMoved.node, (Statement)afterMoved.beforeNode);
+    }
+
+    protected void rollbackRemoval(ModifiedNode removedInfo) {
+        if (removedInfo.node instanceof MethodDeclaration){
+            // Removal method declaration
+            if (!(removedInfo.node.getParentNode().get() instanceof TypeDeclaration)){
+                throw new RuntimeException("RevertRemoveVisitor can only handle MethodDecl that removed in Class/Interface Dec.");
+            }
+
+            TypeDeclaration typeDecl=(TypeDeclaration)removedInfo.node.getParentNode().get();
+            if (removedInfo.index==0)
+                typeDecl.getMembers().addFirst(removedInfo.node);
+            else
+                typeDecl.getMembers().addAfter(removedInfo.node, removedInfo.beforeNode);
+        }
+        else{
+            // Removal statement
+            if (!(removedInfo.node instanceof Statement)){
+                throw new RuntimeException("Inserted node should be Statement.");
+            }
+            if (!(removedInfo.node.getParentNode().get() instanceof BlockStmt)) {
+                throw new RuntimeException("RevertInsertionVisitor can only handle statement that inserted in BlockStmt.");
+            }
+
+            BlockStmt block=(BlockStmt)removedInfo.node.getParentNode().get();
+            int index=removedInfo.index;
+            
+            if (index==0)
+                block.getStatements().addFirst((Statement)removedInfo.node);
+            else
+                block.getStatements().addAfter((Statement)removedInfo.node, (Statement)removedInfo.beforeNode);
+        }
+    }
+
+    protected void rollbackInsertion(ModifiedNode insertedInfo) {
+        if (!(insertedInfo.node instanceof Statement)){
+            throw new RuntimeException("Inserted node should be Statement.");
+        }
+        if (!(insertedInfo.node.getParentNode().get() instanceof BlockStmt)) {
+            throw new RuntimeException("RevertInsertionVisitor can only handle statement that inserted in BlockStmt.");
+        }
+
+        BlockStmt block=(BlockStmt)insertedInfo.node.getParentNode().get();
+        int index=insertedInfo.index;
+        
+        if (index==0)
+            block.getStatements().addFirst((Statement) insertedInfo.node);
+        else
+            block.getStatements().addAfter((Statement) insertedInfo.node, (Statement) insertedInfo.beforeNode);
+    }
+
+    protected void rollbackUpdate(Pair<ModifiedNode,ModifiedNode> updatedInfos) {
+        ModifiedNode beforeUpdated=updatedInfos.a;
+        ModifiedNode afterUpdated=updatedInfos.b;
+        if (beforeUpdated.node instanceof VariableDeclarator){
+            // Update field or variable declaration
+            if (!(beforeUpdated.beforeNode.getParentNode().get() instanceof FieldDeclaration || beforeUpdated.beforeNode.getParentNode().get() instanceof VariableDeclarationExpr) ||
+                            !(afterUpdated.beforeNode.getParentNode().get() instanceof TypeDeclaration || afterUpdated.beforeNode.getParentNode().get() instanceof VariableDeclarationExpr)){
+                throw new RuntimeException("Can only handle update field or variable declaration.");
+            }
+
+            if (beforeUpdated.beforeNode.getParentNode().get() instanceof FieldDeclaration){
+                FieldDeclaration fieldDeclBefore=(FieldDeclaration)beforeUpdated.beforeNode.getParentNode().get();
+                FieldDeclaration fieldDeclAfter=(FieldDeclaration)afterUpdated.beforeNode.getParentNode().get();
+                int indexBefore=beforeUpdated.index;
+                int indexAfter=afterUpdated.index;
+                fieldDeclBefore.getVariables().set(indexBefore, (VariableDeclarator) beforeUpdated.beforeNode);
+                fieldDeclAfter.getVariables().set(indexAfter, (VariableDeclarator) afterUpdated.beforeNode);
+                
+            }
+            else if (beforeUpdated.beforeNode.getParentNode().get() instanceof VariableDeclarationExpr){
+                VariableDeclarationExpr varDeclBefore=(VariableDeclarationExpr)beforeUpdated.beforeNode.getParentNode().get();
+                VariableDeclarationExpr varDeclAfter=(VariableDeclarationExpr)afterUpdated.beforeNode.getParentNode().get();
+                int indexBefore=beforeUpdated.index;
+                int indexAfter=afterUpdated.index;
+                varDeclBefore.getVariables().set(indexBefore, (VariableDeclarator) beforeUpdated.beforeNode);
+                varDeclAfter.getVariables().set(indexAfter, (VariableDeclarator) afterUpdated.beforeNode);
+            }
+            else{
+                throw new RuntimeException("RevertUpdateVisitor can only handle VariableDeclarator that updated in FieldDecl or VarDecl.");
+            }
+        }
+        else if (beforeUpdated.beforeNode instanceof Statement){
+            // Update normal statement
+            BlockStmt blockAfter=(BlockStmt)afterUpdated.parent;
+            int indexBefore=beforeUpdated.index;
+            int indexAfter=afterUpdated.index;
+            assert indexBefore==indexAfter;
+            blockAfter.getStatements().set(indexAfter, (Statement)afterUpdated.beforeNode);
+        }
+        else {
+            throw new RuntimeException("RevertUpdateVisitor can only handle VariableDeclarator or Statement.");
+        }
+    }
+
+
 }

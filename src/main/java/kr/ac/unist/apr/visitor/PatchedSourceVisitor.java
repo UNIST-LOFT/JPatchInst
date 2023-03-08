@@ -28,13 +28,11 @@ import kr.ac.unist.apr.GlobalStates;
 
 public class PatchedSourceVisitor extends TreeVisitor {
     private Map<Node,List<Long>> nodeToId;
-    private Map<DiffType,List<Node>> diffNodes;
     private Set<Node> computed;
     
-    public PatchedSourceVisitor(Map<Node,List<Long>> nodeToId,Map<DiffType,List<Node>> diffNodes) {
+    public PatchedSourceVisitor(Map<Node,List<Long>> nodeToId) {
         super();
         this.nodeToId=nodeToId;
-        this.diffNodes=diffNodes;
     }
     
     private List<Long> getIds(Node node) {
@@ -52,7 +50,6 @@ public class PatchedSourceVisitor extends TreeVisitor {
     private MethodCallExpr genConditionWrapper(Expression condition,Node parentNode) {
         List<Long> ids=getIds(parentNode);
         if (ids==null){
-            // Patched code TODO: More precise handling
             return null;
         }
         if (ids.size()!=2)
@@ -117,7 +114,6 @@ public class PatchedSourceVisitor extends TreeVisitor {
     private void instrumentSwitchCase(SwitchEntry switchCase) {
         List<Long> ids=getIds(switchCase);
         if (ids==null){
-            // Patched code TODO: Handle switch-case
             return;
         }
         if (ids.size()!=1)
@@ -152,6 +148,6 @@ public class PatchedSourceVisitor extends TreeVisitor {
     }
     
     public static enum DiffType {
-        INSERT, DELETE, UPDATE_ORIG,UPDATE_PATCH, MOVE_ORIG, MOVE_PATCH
+        INSERT, DELETE, UPDATE, MOVE
     }
 }
