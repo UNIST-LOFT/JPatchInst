@@ -459,11 +459,11 @@ public class Instrumenter {
     protected void rollbackRemoval(ModifiedNode removedInfo) {
         if (removedInfo.node instanceof MethodDeclaration){
             // Removal method declaration
-            if (!(removedInfo.node.getParentNode().get() instanceof TypeDeclaration)){
+            if (!(removedInfo.parent instanceof TypeDeclaration)){
                 throw new RuntimeException("RevertRemoveVisitor can only handle MethodDecl that removed in Class/Interface Dec.");
             }
 
-            TypeDeclaration typeDecl=(TypeDeclaration)removedInfo.node.getParentNode().get();
+            TypeDeclaration typeDecl=(TypeDeclaration)removedInfo.parent;
             if (removedInfo.index==0)
                 typeDecl.getMembers().addFirst(removedInfo.node);
             else
@@ -474,11 +474,11 @@ public class Instrumenter {
             if (!(removedInfo.node instanceof Statement)){
                 throw new RuntimeException("Inserted node should be Statement.");
             }
-            if (!(removedInfo.node.getParentNode().get() instanceof BlockStmt)) {
+            if (!(removedInfo.parent instanceof BlockStmt)) {
                 throw new RuntimeException("RevertInsertionVisitor can only handle statement that inserted in BlockStmt.");
             }
 
-            BlockStmt block=(BlockStmt)removedInfo.node.getParentNode().get();
+            BlockStmt block=(BlockStmt)removedInfo.parent;
             int index=removedInfo.index;
             
             if (index==0)
@@ -492,11 +492,11 @@ public class Instrumenter {
         if (!(insertedInfo.node instanceof Statement)){
             throw new RuntimeException("Inserted node should be Statement.");
         }
-        if (!(insertedInfo.node.getParentNode().get() instanceof BlockStmt)) {
+        if (!(insertedInfo.parent instanceof BlockStmt)) {
             throw new RuntimeException("RevertInsertionVisitor can only handle statement that inserted in BlockStmt.");
         }
 
-        BlockStmt block=(BlockStmt)insertedInfo.node.getParentNode().get();
+        BlockStmt block=(BlockStmt)insertedInfo.parent;
         int index=insertedInfo.index;
         
         if (index==0)
@@ -510,23 +510,23 @@ public class Instrumenter {
         ModifiedNode afterUpdated=updatedInfos.b;
         if (beforeUpdated.node instanceof VariableDeclarator){
             // Update field or variable declaration
-            if (!(beforeUpdated.beforeNode.getParentNode().get() instanceof FieldDeclaration || beforeUpdated.beforeNode.getParentNode().get() instanceof VariableDeclarationExpr) ||
-                            !(afterUpdated.beforeNode.getParentNode().get() instanceof TypeDeclaration || afterUpdated.beforeNode.getParentNode().get() instanceof VariableDeclarationExpr)){
+            if (!(beforeUpdated.parent instanceof FieldDeclaration || beforeUpdated.parent instanceof VariableDeclarationExpr) ||
+                            !(afterUpdated.parent instanceof TypeDeclaration || afterUpdated.parent instanceof VariableDeclarationExpr)){
                 throw new RuntimeException("Can only handle update field or variable declaration.");
             }
 
-            if (beforeUpdated.beforeNode.getParentNode().get() instanceof FieldDeclaration){
-                FieldDeclaration fieldDeclBefore=(FieldDeclaration)beforeUpdated.beforeNode.getParentNode().get();
-                FieldDeclaration fieldDeclAfter=(FieldDeclaration)afterUpdated.beforeNode.getParentNode().get();
+            if (beforeUpdated.parent instanceof FieldDeclaration){
+                FieldDeclaration fieldDeclBefore=(FieldDeclaration)beforeUpdated.parent;
+                FieldDeclaration fieldDeclAfter=(FieldDeclaration)afterUpdated.parent;
                 int indexBefore=beforeUpdated.index;
                 int indexAfter=afterUpdated.index;
                 fieldDeclBefore.getVariables().set(indexBefore, (VariableDeclarator) beforeUpdated.beforeNode);
                 fieldDeclAfter.getVariables().set(indexAfter, (VariableDeclarator) afterUpdated.beforeNode);
                 
             }
-            else if (beforeUpdated.beforeNode.getParentNode().get() instanceof VariableDeclarationExpr){
-                VariableDeclarationExpr varDeclBefore=(VariableDeclarationExpr)beforeUpdated.beforeNode.getParentNode().get();
-                VariableDeclarationExpr varDeclAfter=(VariableDeclarationExpr)afterUpdated.beforeNode.getParentNode().get();
+            else if (beforeUpdated.parent instanceof VariableDeclarationExpr){
+                VariableDeclarationExpr varDeclBefore=(VariableDeclarationExpr)beforeUpdated.parent;
+                VariableDeclarationExpr varDeclAfter=(VariableDeclarationExpr)afterUpdated.parent;
                 int indexBefore=beforeUpdated.index;
                 int indexAfter=afterUpdated.index;
                 varDeclBefore.getVariables().set(indexBefore, (VariableDeclarator) beforeUpdated.beforeNode);

@@ -12,7 +12,8 @@ public class Path {
             if (file.isDirectory()) {
                 sources.addAll(getAllSources(rootDirectory));
             } else {
-                sources.add(file.getAbsolutePath());
+                if (file.getName().endsWith(".java"))
+                    sources.add(file.getAbsolutePath());
             }
         }
 

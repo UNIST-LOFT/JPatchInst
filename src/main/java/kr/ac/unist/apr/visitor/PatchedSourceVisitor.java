@@ -1,6 +1,7 @@
 package kr.ac.unist.apr.visitor;
 
 import java.util.Arrays;
+import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
@@ -33,6 +34,7 @@ public class PatchedSourceVisitor extends TreeVisitor {
     public PatchedSourceVisitor(Map<Node,List<Long>> nodeToId) {
         super();
         this.nodeToId=nodeToId;
+        computed=new HashSet<>();
     }
     
     private List<Long> getIds(Node node) {
