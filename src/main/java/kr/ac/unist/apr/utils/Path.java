@@ -24,6 +24,4 @@ public class Path {
         }
         return sources;
     }
-    // TODO: Classpath (e.g. target/dependency) and Sourcepath (e.g. src/main/java)
-    
 }
