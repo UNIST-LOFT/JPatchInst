@@ -16,7 +16,7 @@ import java.util.Map;
 public class GlobalStates {
   public static final String STATE_CLASS_NAME="kr.ac.unist.apr.GlobalStates";
   public static final String STATE_COND_METHOD="wrapConditionExpr";
-  public static final String STATE_BRANCH_METHOD="setBranchInfo";
+  public static final String STATE_BRANCH_METHOD="wrapSwitchEntry";
   public static final String STATE_SAVE_INFO="saveBranchInfo";
   
   /**
@@ -56,6 +56,13 @@ public class GlobalStates {
     }
 
     return condition;
+  }
+
+  public static void wrapSwitchEntry(long id){
+    if (System.getenv("GREYBOX_BRANCH").equals("1")) {
+      setBranchInfo(id);
+      saveBranchInfo();
+    }
   }
 
   /**

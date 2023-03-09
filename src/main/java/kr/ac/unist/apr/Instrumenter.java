@@ -5,6 +5,7 @@ import java.io.File;
 import java.io.FileReader;
 import java.io.FileWriter;
 import java.io.IOException;
+import java.lang.reflect.Method;
 import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;
@@ -18,13 +19,19 @@ import com.github.gumtreediff.matchers.Matchers;
 import com.github.gumtreediff.tree.ITree;
 import com.github.gumtreediff.tree.TreeContext;
 import com.github.javaparser.ast.Node;
+import com.github.javaparser.ast.NodeList;
 import com.github.javaparser.ast.body.FieldDeclaration;
 import com.github.javaparser.ast.body.MethodDeclaration;
 import com.github.javaparser.ast.body.TypeDeclaration;
 import com.github.javaparser.ast.body.VariableDeclarator;
+import com.github.javaparser.ast.expr.Expression;
 import com.github.javaparser.ast.expr.VariableDeclarationExpr;
 import com.github.javaparser.ast.stmt.BlockStmt;
+import com.github.javaparser.ast.stmt.ForStmt;
+import com.github.javaparser.ast.stmt.IfStmt;
 import com.github.javaparser.ast.stmt.Statement;
+import com.github.javaparser.ast.stmt.SwitchEntry;
+import com.github.javaparser.ast.stmt.WhileStmt;
 import com.github.javaparser.utils.Pair;
 
 import kr.ac.unist.apr.gumtree.MyRootsClassifier;
@@ -160,8 +167,6 @@ public class Instrumenter {
 
         assert dstAddSet.size()<=1 && srcDelSet.size()<=1 && srcUpdSet.size()<=1 && dstUpdSet.size()<=1 && srcMvSet.size()<=1 && dstMvSet.size()<=1;
 
-        Node ignoreNode=null;
-
         Main.LOGGER.log(Level.INFO, "GumTreeJP finished, parsing results...");
         if (dstAddSet.size()!=0 && srcMvSet.size()!=0){
             // Convert insertion+move to update
@@ -251,6 +256,21 @@ public class Instrumenter {
             this.index = index;
             this.parent = parent;
             this.beforeNode=beforeNode;
+        }
+    }
+
+    static class ModifiedStmt extends ModifiedNode {
+        Class<? extends Node> parentClass;
+        Method nodeGetter;
+        Method nodeSetter;
+        public ModifiedStmt(Node node,int index, Node parent,Method nodeGetter,Method nodeSetter) {
+            super(node, index, parent,null);
+            this.parentClass = parent.getClass();
+            this.nodeGetter = nodeGetter;
+            this.nodeSetter = nodeSetter;
+        }
+        public ModifiedStmt(Node node, Node parent,Method nodeGetter,Method nodeSetter) {
+            this(node, 0, parent, nodeGetter, nodeSetter);
         }
     }
 
@@ -424,26 +444,223 @@ public class Instrumenter {
             // Update normal statement
             Node curBefore=beforeNode;
             Node curAfter=afteNode;
-            while (!(curBefore.getParentNode().get() instanceof BlockStmt)){
+            while (!(curBefore.getParentNode().get() instanceof BlockStmt) &&
+                    !(curBefore.getParentNode().get() instanceof IfStmt) &&
+                    !(curBefore.getParentNode().get() instanceof WhileStmt) &&
+                    !(curBefore.getParentNode().get() instanceof ForStmt) &&
+                    !(curBefore.getParentNode().get() instanceof SwitchEntry)){
                 curBefore=curBefore.getParentNode().get();
                 curAfter=curAfter.getParentNode().get();
             }
-            assert curAfter.getParentNode().get() instanceof BlockStmt;
+            assert curAfter.getParentNode().get().getClass().getName().equals(curBefore.getParentNode().get().getClass().getName());
 
-            BlockStmt blockBefore=(BlockStmt)curBefore.getParentNode().get();
-            BlockStmt blockAfter=(BlockStmt)curAfter.getParentNode().get();
-            int indexBefore=blockBefore.getStatements().indexOf(curBefore);
-            int indexAfter=blockAfter.getStatements().indexOf(curAfter);
-            assert indexBefore==indexAfter;
-            blockAfter.getStatements().set(indexAfter, (Statement)curBefore.clone());
+            if (curBefore.getParentNode().get() instanceof BlockStmt){
+                // Handle block statement
+                BlockStmt blockBefore=(BlockStmt)curBefore.getParentNode().get();
+                BlockStmt blockAfter=(BlockStmt)curAfter.getParentNode().get();
+                int indexBefore=blockBefore.getStatements().indexOf(curBefore);
+                int indexAfter=blockAfter.getStatements().indexOf(curAfter);
+                assert indexBefore==indexAfter;
+                blockAfter.getStatements().set(indexAfter, (Statement)curBefore.clone());
 
-            ModifiedNode beforeModified=new ModifiedNode(curBefore,indexBefore,blockBefore,blockBefore.getStatements().get(indexBefore));
-            ModifiedNode afterModified=new ModifiedNode(curAfter,indexAfter,blockAfter,blockAfter.getStatements().get(indexAfter));
-            return new Pair<ModifiedNode,ModifiedNode>(beforeModified, afterModified);
+                ModifiedNode beforeModified=new ModifiedNode(curBefore,indexBefore,blockBefore,blockBefore.getStatements().get(indexBefore));
+                ModifiedNode afterModified=new ModifiedNode(curAfter,indexAfter,blockAfter,blockAfter.getStatements().get(indexAfter));
+                return new Pair<ModifiedNode,ModifiedNode>(beforeModified, afterModified);
+            }
+            else if (curBefore.getParentNode().get() instanceof IfStmt) {
+                // Handle if statement
+                IfStmt ifBefore=(IfStmt)curBefore.getParentNode().get();
+                IfStmt ifAfter=(IfStmt)curAfter.getParentNode().get();
+
+                Method methodGetter=null;
+                Method methodSetter=null;
+                if (ifBefore.getThenStmt().equals(curBefore)){
+                    try {
+                        methodGetter=ifBefore.getClass().getMethod("getThenStmt");
+                        methodSetter=ifBefore.getClass().getMethod("setThenStmt",Statement.class);
+
+                        ifAfter.setThenStmt((Statement) curBefore);
+                    } catch (NoSuchMethodException | SecurityException e) {
+                        e.printStackTrace();
+                        System.exit(1);
+                    }
+                }
+                else if (ifBefore.getElseStmt().isPresent() && ifBefore.getElseStmt().get().equals(curBefore)){
+                    try {
+                        methodGetter=ifBefore.getClass().getMethod("getElseStmt");
+                        methodSetter=ifBefore.getClass().getMethod("setElseStmt",Statement.class);
+
+                        ifAfter.setElseStmt((Statement) curBefore);
+                    } catch (NoSuchMethodException | SecurityException e) {
+                        e.printStackTrace();
+                        System.exit(1);
+                    }
+                }
+                else if (ifBefore.getCondition().equals(curBefore)){
+                    try {
+                        methodGetter=ifBefore.getClass().getMethod("getCondition");
+                        methodSetter=ifBefore.getClass().getMethod("setCondition",Expression.class);
+
+                        ifAfter.setCondition((Expression) curBefore);
+                    } catch (NoSuchMethodException | SecurityException e) {
+                        e.printStackTrace();
+                        System.exit(1);
+                    }
+                }
+                else{
+                    throw new RuntimeException("RevertUpdate can only handle then/else/condition for IfStmt.");
+                }
+
+                ModifiedNode beforeModified=new ModifiedStmt(curBefore,ifBefore,methodGetter,methodSetter);
+                ModifiedNode afterModified=new ModifiedStmt(curAfter,ifAfter,methodGetter,methodSetter);
+                return new Pair<ModifiedNode,ModifiedNode>(beforeModified, afterModified);
+            }
+            else if (curBefore.getParentNode().get() instanceof WhileStmt) {
+                // Handle while statement
+                WhileStmt whileBefore=(WhileStmt)curBefore.getParentNode().get();
+                WhileStmt whileAfter=(WhileStmt)curAfter.getParentNode().get();
+
+                Method methodGetter=null;
+                Method methodSetter=null;
+                if (whileBefore.getBody().equals(curBefore)){
+                    try {
+                        methodGetter=whileBefore.getClass().getMethod("getBody");
+                        methodSetter=whileBefore.getClass().getMethod("setBody",Statement.class);
+
+                        whileAfter.setBody((Statement) curBefore);
+                    } catch (NoSuchMethodException | SecurityException e) {
+                        e.printStackTrace();
+                        System.exit(1);
+                    }
+                }
+                else if (whileBefore.getCondition().equals(curBefore)){
+                    try {
+                        methodGetter=whileBefore.getClass().getMethod("getCondition");
+                        methodSetter=whileBefore.getClass().getMethod("setCondition",Expression.class);
+
+                        whileAfter.setCondition((Expression) curBefore);
+                    } catch (NoSuchMethodException | SecurityException e) {
+                        e.printStackTrace();
+                        System.exit(1);
+                    }
+                }
+                else{
+                    throw new RuntimeException("RevertUpdate can only handle body/condition for WhileStmt.");
+                }
+
+                ModifiedNode beforeModified=new ModifiedStmt(curBefore,whileBefore,methodGetter,methodSetter);
+                ModifiedNode afterModified=new ModifiedStmt(curAfter,whileAfter,methodGetter,methodSetter);
+                return new Pair<ModifiedNode,ModifiedNode>(beforeModified, afterModified);
+            }
+            else if (curBefore.getParentNode().get() instanceof ForStmt) {
+                // Handle for statement
+                ForStmt forBefore=(ForStmt)curBefore.getParentNode().get();
+                ForStmt forAfter=(ForStmt)curAfter.getParentNode().get();
+
+                Method methodGetter=null;
+                Method methodSetter=null;
+                int indexBefore=0;
+                int indexAfter=0;
+                if (forBefore.getBody().equals(curBefore)){
+                    try {
+                        methodGetter=forBefore.getClass().getMethod("getBody");
+                        methodSetter=forBefore.getClass().getMethod("setBody",Statement.class);
+
+                        forAfter.setBody((Statement) curBefore);
+                    } catch (NoSuchMethodException | SecurityException e) {
+                        e.printStackTrace();
+                        System.exit(1);
+                    }
+                }
+                else if (forBefore.getInitialization().contains(curBefore)){
+                    try {
+                        NodeList<Expression> beforeInit=forBefore.getInitialization();
+                        NodeList<Expression> afterInit=forAfter.getInitialization();
+
+                        methodGetter=forBefore.getClass().getMethod("getInitialization");
+                        methodSetter=forBefore.getClass().getMethod("setInitialization",beforeInit.getClass());
+                        indexBefore=beforeInit.indexOf(curBefore);
+                        indexAfter=afterInit.indexOf(curAfter);
+
+                        afterInit.set(indexAfter, (Expression) curBefore);
+                        forAfter.setInitialization(afterInit);
+                    } catch (NoSuchMethodException | SecurityException e) {
+                        e.printStackTrace();
+                        System.exit(1);
+                    }
+                }
+                else if (forBefore.getUpdate().contains(curBefore)){
+                    try {
+                        NodeList<Expression> beforeUpdate=forBefore.getUpdate();
+                        NodeList<Expression> afterUpdate=forAfter.getUpdate();
+
+                        methodGetter=forBefore.getClass().getMethod("getUpdate");
+                        methodSetter=forBefore.getClass().getMethod("setUpdate",beforeUpdate.getClass());
+                        indexBefore=beforeUpdate.indexOf(curBefore);
+                        indexAfter=afterUpdate.indexOf(curAfter);
+
+                        afterUpdate.set(indexAfter, (Expression) curBefore);
+                        forAfter.setUpdate(afterUpdate);
+                    } catch (NoSuchMethodException | SecurityException e) {
+                        e.printStackTrace();
+                        System.exit(1);
+                    }
+                }
+                else if (forBefore.getCompare().isPresent() && forBefore.getCompare().get().equals(curBefore)){
+                    try {
+                        methodGetter=forBefore.getClass().getMethod("getCompare");
+                        methodSetter=forBefore.getClass().getMethod("setCompare",Expression.class);
+
+                        forAfter.setCompare((Expression) curBefore);
+                    } catch (NoSuchMethodException | SecurityException e) {
+                        e.printStackTrace();
+                        System.exit(1);
+                    }
+                }
+                else{
+                    throw new RuntimeException("RevertUpdate can only handle body/init/update/compare for ForStmt.");
+                }
+
+                ModifiedNode beforeModified=new ModifiedStmt(curBefore,indexBefore,forBefore,methodGetter,methodSetter);
+                ModifiedNode afterModified=new ModifiedStmt(curAfter,indexAfter,forAfter,methodGetter,methodSetter);
+                return new Pair<ModifiedNode,ModifiedNode>(beforeModified, afterModified);
+            }
+            else if (curBefore.getParentNode().get() instanceof SwitchEntry) {
+                // Handle while statement
+                SwitchEntry caseBefore=(SwitchEntry)curBefore.getParentNode().get();
+                SwitchEntry caseAfter=(SwitchEntry)curAfter.getParentNode().get();
+
+                Method methodGetter=null;
+                Method methodSetter=null;
+                int indexBefore=0;
+                int indexAfter=0;
+                if (caseBefore.getStatements().contains(curBefore)){
+                    try {
+                        NodeList<Statement> beforeUpdate=caseBefore.getStatements();
+                        NodeList<Statement> afterUpdate=caseAfter.getStatements();
+
+                        methodGetter=caseBefore.getClass().getMethod("getStatements");
+                        methodSetter=caseBefore.getClass().getMethod("setStatements",beforeUpdate.getClass());
+                        indexBefore=beforeUpdate.indexOf(curBefore);
+                        indexAfter=afterUpdate.indexOf(curAfter);
+
+                        afterUpdate.set(indexAfter, (Statement) curBefore);
+                        caseAfter.setStatements(afterUpdate);
+                    } catch (NoSuchMethodException | SecurityException e) {
+                        e.printStackTrace();
+                        System.exit(1);
+                    }
+                }
+                else{
+                    throw new RuntimeException("RevertUpdate can only handle body for SwitchEntry (case, default).");
+                }
+
+                ModifiedNode beforeModified=new ModifiedStmt(curBefore,indexBefore,caseBefore,methodGetter,methodSetter);
+                ModifiedNode afterModified=new ModifiedStmt(curAfter,indexAfter,caseAfter,methodGetter,methodSetter);
+                return new Pair<ModifiedNode,ModifiedNode>(beforeModified, afterModified);
+            }
         }
-        else {
-            throw new RuntimeException("RevertUpdateVisitor can only handle VariableDeclarator or Statement.");
-        }
+        throw new RuntimeException("RevertUpdateVisitor can only handle VariableDeclarator or Statement.");
     }
 
     protected void rollbackMove(Pair<ModifiedNode,ModifiedNode> movedInfos) {
@@ -537,16 +754,90 @@ public class Instrumenter {
                 throw new RuntimeException("RevertUpdateVisitor can only handle VariableDeclarator that updated in FieldDecl or VarDecl.");
             }
         }
-        else if (beforeUpdated.beforeNode instanceof Statement){
-            // Update normal statement
-            BlockStmt blockAfter=(BlockStmt)afterUpdated.parent;
-            int indexBefore=beforeUpdated.index;
-            int indexAfter=afterUpdated.index;
-            assert indexBefore==indexAfter;
-            blockAfter.getStatements().set(indexAfter, (Statement)afterUpdated.node);
-        }
-        else {
-            throw new RuntimeException("RevertUpdateVisitor can only handle VariableDeclarator or Statement.");
+        else if (beforeUpdated.node instanceof Statement){
+            if (beforeUpdated.parent instanceof BlockStmt){
+                // Update normal statement
+                BlockStmt blockAfter=(BlockStmt)afterUpdated.parent;
+                int indexBefore=beforeUpdated.index;
+                int indexAfter=afterUpdated.index;
+                assert indexBefore==indexAfter;
+                blockAfter.getStatements().set(indexAfter, (Statement)afterUpdated.node);
+            }
+            else if (beforeUpdated.parent instanceof IfStmt) {
+                ModifiedStmt beforeModified=(ModifiedStmt)beforeUpdated;
+                ModifiedStmt afterModified=(ModifiedStmt)afterUpdated;
+
+                IfStmt ifStmt=(IfStmt)afterModified.parent;
+                if (beforeModified.nodeGetter.getName().equals("getThenStmt")) {
+                    ifStmt.setThenStmt((Statement) afterModified.node);
+                }
+                else if (beforeModified.nodeGetter.getName().equals("getElseStmt")) {
+                    ifStmt.setElseStmt((Statement) afterModified.node);
+                }
+                else if (beforeModified.nodeGetter.getName().equals("getCondition")) {
+                    ifStmt.setCondition((Expression) afterModified.node);
+                }
+                else {
+                    throw new RuntimeException("RevertUpdateVisitor can only handle VariableDeclarator or Statement.");
+                }
+            }
+            else if (beforeUpdated.parent instanceof WhileStmt) {
+                ModifiedStmt beforeModified=(ModifiedStmt)beforeUpdated;
+                ModifiedStmt afterModified=(ModifiedStmt)afterUpdated;
+
+                WhileStmt whileStmt=(WhileStmt)afterModified.parent;
+                if (beforeModified.nodeGetter.getName().equals("getBody")) {
+                    whileStmt.setBody((Statement) afterModified.node);
+                }
+                else if (beforeModified.nodeGetter.getName().equals("getCondition")) {
+                    whileStmt.setCondition((Expression) afterModified.node);
+                }
+                else {
+                    throw new RuntimeException("RevertUpdateVisitor can only handle VariableDeclarator or Statement.");
+                }
+            }
+            else if (beforeUpdated.parent instanceof ForStmt) {
+                ModifiedStmt beforeModified=(ModifiedStmt)beforeUpdated;
+                ModifiedStmt afterModified=(ModifiedStmt)afterUpdated;
+
+                ForStmt forStmt=(ForStmt)afterModified.parent;
+                if (beforeModified.nodeGetter.getName().equals("getBody")) {
+                    forStmt.setBody((Statement) afterModified.node);
+                }
+                else if (beforeModified.nodeGetter.getName().equals("getCompare")) {
+                    forStmt.setCompare((Expression) afterModified.node);
+                }
+                else if (beforeModified.nodeGetter.getName().equals("getInitialization")) {
+                    NodeList<Expression> initList=forStmt.getInitialization();
+                    initList.set(afterModified.index, (Expression) afterModified.node);
+                    forStmt.setInitialization(initList);
+                }
+                else if (beforeModified.nodeGetter.getName().equals("getUpdate")) {
+                    NodeList<Expression> updateList=forStmt.getUpdate();
+                    updateList.set(afterModified.index, (Expression) afterModified.node);
+                    forStmt.setUpdate(updateList);
+                }
+                else {
+                    throw new RuntimeException("RevertUpdateVisitor can only handle VariableDeclarator or Statement.");
+                }
+            }
+            else if (beforeUpdated.parent instanceof SwitchEntry) {
+                ModifiedStmt beforeModified=(ModifiedStmt)beforeUpdated;
+                ModifiedStmt afterModified=(ModifiedStmt)afterUpdated;
+
+                SwitchEntry switchEntry=(SwitchEntry)afterModified.parent;
+                if (beforeModified.nodeGetter.getName().equals("getStatements")) {
+                    NodeList<Statement> stmtList=switchEntry.getStatements();
+                    stmtList.set(afterModified.index, (Statement) afterModified.node);
+                    switchEntry.setStatements(stmtList);
+                }
+                else {
+                    throw new RuntimeException("RevertUpdateVisitor can only handle VariableDeclarator or Statement.");
+                }
+            }
+            else {
+                throw new RuntimeException("RevertUpdateVisitor can only handle VariableDeclarator or Statement.");
+            }
         }
     }
 
