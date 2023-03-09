@@ -108,6 +108,15 @@ public class Instrumenter {
             JavaParserGenerator parser = new JavaParserGenerator();
             FileReader fReader = new FileReader(source);
             BufferedReader bReader = new BufferedReader(fReader);
+            if (bReader.readLine().equals("// __INSTRUMENTED__")) {
+                bReader.close();
+                fReader.close();
+                continue;
+            }
+            fReader.close();
+            bReader.close();
+            bReader=new BufferedReader(new FileReader(source));
+            
             TreeContext targetCtxt = parser.generate(bReader);
 
             fReader.close();
@@ -134,7 +143,6 @@ public class Instrumenter {
         }
 
         // Instrument target program without patched file
-        // TODO: Skip already instrumented file
         Main.LOGGER.log(Level.INFO, "Instrument target program except patched file...");
         for (Map.Entry<String,TreeContext> targetCtxt:targetNodes.entrySet()){
             TargetSourceVisitor instrumenterVisitor=new TargetSourceVisitor(originalNodeToId.get(targetCtxt.getKey()));
@@ -242,6 +250,7 @@ public class Instrumenter {
         Main.LOGGER.log(Level.INFO, "Save patched file...");
         // Save patched file
         FileWriter writer = new FileWriter(patchedFilePath);
+        writer.write("// __INSTRUMENTED__\n");
         writer.write(patchedRootNode.getRoot().getJParserNode().toString());
         writer.close();
     }
