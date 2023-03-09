@@ -4,7 +4,16 @@ import java.io.File;
 import java.util.ArrayList;
 import java.util.List;
 
+/**
+ * Utility class related to file/path.
+ * @author Youngjae Kim (FreddyYJ)
+ */
 public class Path {
+    /**
+     * Get all source files in the given directory.
+     * @param rootDirectory root directory to search for source files (e.g. src/main/java for Maven project).
+     * @return list of source files in absolute path.
+     */
     public static List<String> getAllSources(File rootDirectory) {
         List<String> sources = new ArrayList<>();
         File[] files = rootDirectory.listFiles();

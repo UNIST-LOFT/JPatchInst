@@ -26,16 +26,38 @@ import com.github.javaparser.ast.visitor.TreeVisitor;
 
 import kr.ac.unist.apr.GlobalStates;
 
+/**
+ * This visitor is used to instrument the patched source code.
+ * <p>
+ *  We need special visitor for patched source because the patched source is not exactly same with the original source.
+ * </p>
+ * @author Youngjae Kim (FreddyYJ)
+ */
 public class PatchedSourceVisitor extends TreeVisitor {
     private Map<Node,List<Long>> nodeToId;
     private Set<Node> computed;
     
+    /**
+     * Constructor with node-branchID mapping from {@link OriginalSourceVisitor}.
+     * @param nodeToId node-branchID mapping from {@link OriginalSourceVisitor}.
+     */
     public PatchedSourceVisitor(Map<Node,List<Long>> nodeToId) {
         super();
         this.nodeToId=nodeToId;
         computed=new HashSet<>();
     }
     
+    /**
+     * Get branch IDs for the given node.
+     * <p>
+     *  Since the original source and target source is not same, we return null if the node is not found in the mapping.
+     * 
+     *  The size of return value should be 2 if the node is a conditional statement.
+     *  The size of return value should be 1 if the node is a case statement.
+     * </p>
+     * @param node node to find branch IDs.
+     * @return branch IDs for the given node or null if node is not found.
+     */
     private List<Long> getIds(Node node) {
         for (Node n:nodeToId.keySet()) {
             boolean isEqual=n.equals(node);
@@ -47,6 +69,14 @@ public class PatchedSourceVisitor extends TreeVisitor {
         return null;
     }
 
+    /**
+     * generate a wrapper method call for the given condition.
+     * <p>
+     *  It returns null if the ID is not found in the mapping.
+     * @param condition condition to be wrapped.
+     * @param parentNode parent node of the condition.
+     * @return wrapper method call for the given condition or null if ID is not found.
+     */
     private MethodCallExpr genConditionWrapper(Expression condition,Node parentNode) {
         List<Long> ids=getIds(parentNode);
         if (ids==null){
@@ -62,6 +92,10 @@ public class PatchedSourceVisitor extends TreeVisitor {
         return new MethodCallExpr(classAccess, methodName, new NodeList<>(args));
     }
 
+    /**
+     * Instrument the given statement.
+     * @param stmt {@link IfStmt}, {@link ForStmt}, {@link WhileStmt} or {@link DoStmt}.
+     */
     private void instrumentCondition(Statement stmt) {
         if (stmt instanceof IfStmt) {
             // if statement
@@ -111,6 +145,10 @@ public class PatchedSourceVisitor extends TreeVisitor {
         // TODO: Handle for-each statement
     }
 
+    /**
+     * Instrument the given {@link SwitchEntry}.
+     * @param switchCase {@link SwitchEntry} to be instrumented.
+     */
     private void instrumentSwitchCase(SwitchEntry switchCase) {
         List<Long> ids=getIds(switchCase);
         if (ids==null){
@@ -145,9 +183,5 @@ public class PatchedSourceVisitor extends TreeVisitor {
             SwitchEntry switchCase=(SwitchEntry)node;
             instrumentSwitchCase(switchCase);
         }
-    }
-    
-    public static enum DiffType {
-        INSERT, DELETE, UPDATE, MOVE
     }
 }

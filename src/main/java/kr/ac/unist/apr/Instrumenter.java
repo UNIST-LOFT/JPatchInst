@@ -43,8 +43,8 @@ import kr.ac.unist.apr.visitor.TargetSourceVisitor;
 /**
  * Main class of instrumentation.
  * <p>
- *  This class will create AST for original source of patched file and whole target program (except test classes)
- *  and instrument the whole target program.
+ *  This class will create AST for original program and target program (except test classes)
+ *  and instrument the whole target program with patch.
  * 
  *  If the patch insert/modify new branch(es), new branch(es) will not be instrumented.
  *  If the patch removes branch(es), the IDs of removed branch(es) will not be used.
@@ -63,11 +63,16 @@ public class Instrumenter {
     /**
      * Default constructor.
      * <p>
+     *  Generate ASTs for original program and target program (except test classes).
+     * 
      *  Original file path and patched file patch are required to compare between ASTs of them.
-     *  Class path and source path are required to generate ASTs of target program.
+     *  Class paths are required to generate ASTs of target program.
      *  Every paths should be absolute.
      * 
      *  Note: This constructor will consume some time, to generate every ASTs for target program.
+     * 
+     *  originalFilePath and patchedFilePath should end with .java.
+     *  targetSourcePath and originalSourcePath should be directory.
      * </p>
      * @param originalFilePath path of original source file of patched file
      * @param patchedFilePath path of patched file
@@ -128,8 +133,20 @@ public class Instrumenter {
         }
     }
     
+    /**
+     * Instrument target program with handling patch.
+     * <p>
+     *  This method instruments branches with unique IDs.
+     *  It also overwrites target sources.
+     *  Backup the original target sources before using this method.
+     * 
+     *  This method guarantees that the branch IDs are always same.
+     * </p>
+     * @throws UnsupportedOperationException thrown by GumTreeJP
+     * @throws IOException thrown at saving instrumented source
+     */
     public void instrument() throws UnsupportedOperationException, IOException{
-        // Visit original source visitor
+        // Visit original source visitor and get IDs
         // TODO: Cache/load this result with file
         Main.LOGGER.log(Level.INFO, "Gen IDs from original ASTs...");
         OriginalSourceVisitor originalSourceVisitor=new OriginalSourceVisitor();
@@ -201,6 +218,7 @@ public class Instrumenter {
             }
         }
 
+        // Revert changes in patched AST
         Main.LOGGER.log(Level.INFO, "Reverts original and patched ASTs to instrument...");
         ModifiedNode modifiedNode=null;
         Pair<ModifiedNode,ModifiedNode> updatedNode=null;
@@ -225,10 +243,12 @@ public class Instrumenter {
             updatedNode=revertMove(srcMvSet.get(0),dstMvSet.get(0));
         }
 
+        // Instrument patched source
         Main.LOGGER.log(Level.INFO, "Instrument patched file...");
         PatchedSourceVisitor patchedSourceVisitor=new PatchedSourceVisitor(originalNodeToId.get(originalFilePath));
         patchedSourceVisitor.visitPreOrder(patchedRootNode.getRoot().getJParserNode());
         
+        // Rollback changes in patched AST
         Main.LOGGER.log(Level.INFO, "Roll back reverted ASTs...");
         if (dstAddSet.size()>0){
             assert dstAddSet.size()==1;
@@ -255,7 +275,26 @@ public class Instrumenter {
         writer.close();
     }
 
+    /**
+     * Information class of a patched node.
+     * <p>
+     *  For insertion and removal, this class represents the inserted/removed node.
+     *  For update and move, this class represents the updated/moved node from original and updated/moved node to patch.
+     * </p>
+     * @see modifiedStmt
+     * @see Instrumenter#revertInsertion
+     * @see Instrumenter#revertRemoval
+     * @see Instrumenter#revertUpdate
+     * @see Instrumenter#revertMove
+     * @see Instrumenter#rollbackInsertion
+     * @see Instrumenter#rollbackRemoval
+     * @see Instrumenter#rollbackUpdate
+     * @see Instrumenter#rollbackMove
+     */
     static class ModifiedNode {
+        /**
+         * The inserted/removed/updated/moved node.
+         */
         Node node;
         int index;
         Node parent;
@@ -268,21 +307,49 @@ public class Instrumenter {
         }
     }
 
+    /**
+     * Information class if patch modified a special statement.
+     * <p>
+     *  For update, if a patch modifies a children of {@link IfStmt}, {@link WhileStmt}, {@link ForStmt} or {@link SwitchEntry}, this class represents which child node is modified.
+     * </p>
+     * @see Instrumenter#revertUpdate
+     * @see Instrumenter#rollbackUpdate
+     */
     static class ModifiedStmt extends ModifiedNode {
         Class<? extends Node> parentClass;
         Method nodeGetter;
         Method nodeSetter;
+        /**
+         * Constructor for variable number of children (e.g. {@link SwitchEntry#getStatements()}).
+         * @param node modified node
+         * @param index index of modified node in children
+         * @param parent parent node ({@link IfStmt}, {@link WhileStmt}, {@link ForStmt} or {@link SwitchEntry})
+         * @param nodeGetter getter method of children (e.g. {@link SwitchEntry#getStatements()}
+         * @param nodeSetter setter method of children (e.g. {@link SwitchEntry#setStatements(NodeList)})
+         */
         public ModifiedStmt(Node node,int index, Node parent,Method nodeGetter,Method nodeSetter) {
             super(node, index, parent,null);
             this.parentClass = parent.getClass();
             this.nodeGetter = nodeGetter;
             this.nodeSetter = nodeSetter;
         }
+        /**
+         * Constructor for single child (e.g. {@link IfStmt#getThenStmt()}).
+         * @param node modified node
+         * @param parent parent node ({@link IfStmt}, {@link WhileStmt}, {@link ForStmt} or {@link SwitchEntry})
+         * @param nodeGetter getter method of children (e.g. {@link IfStmt#getThenStmt()}
+         * @param nodeSetter setter method of children (e.g. {@link IfStmt#setThenStmt(Statement)})
+         */
         public ModifiedStmt(Node node, Node parent,Method nodeGetter,Method nodeSetter) {
             this(node, 0, parent, nodeGetter, nodeSetter);
         }
     }
 
+    /**
+     * Convert {@link ITree}s into {@link Statement}s.
+     * @param trees {@link ITree}s to be converted
+     * @return {@link Statement}s
+     */
     private List<Node> convertNodes(Set<ITree> trees){
         List<Node> result=new ArrayList<>();
         for (ITree tree:trees){
@@ -300,6 +367,22 @@ public class Instrumenter {
         return finalResult;
     }
 
+    /**
+     * Revert block-to-block move.
+     * <p>
+     *  Revert move in {@link BlockStmt}.
+     * 
+     *  Revert move by move the modified node to original location.
+     *  This will return 2 {@link ModifiedNode}s, first one represents the change in original AST
+     *   and second one represents the change in patch AST.
+     * 
+     *  Call {@link Instrumenter#rollbackMove} after the instrumentation.
+     * </p>
+     * @param movedFromOriginal moved node in original AST
+     * @param movedToPatch moved node in patch AST
+     * @return pair of {@link ModifiedNode}s
+     * @see Instrumenter#rollbackMove
+     */
     protected Pair<ModifiedNode,ModifiedNode> revertMove(Node movedFromOriginal,Node movedToPatch) {
         if (movedFromOriginal.getParentNode().get() instanceof BlockStmt &&
                         movedToPatch.getParentNode().get() instanceof BlockStmt){
@@ -335,6 +418,22 @@ public class Instrumenter {
         }
     }
 
+    /**
+     * Revert removal.
+     * <p>
+     *  Revert {@link Statement} removal in {@link BlockStmt} or {@link MethodDeclaration} removal in {@link TypeDeclaraion}.
+     * 
+     *  This method removes the removed node from the original AST.
+     *  This returns a {@link ModifiedNode} represents the removed node in original AST.
+     * 
+     *  Call {@link Instrumenter#rollbackRemoval} after the instrumentation.
+     * 
+     *  Note: `removedNode` should be in the original AST and not in the patch AST.
+     * </p>
+     * @param removedNode removed node, in original AST
+     * @return information of removed node
+     * @see Instrumenter#rollbackRemoval
+     */
     protected ModifiedNode revertRemoval(Node removedNode) {
         if (removedNode instanceof MethodDeclaration){
             // Removal method declaration
@@ -378,6 +477,22 @@ public class Instrumenter {
         }
     }
 
+    /**
+     * Revert insertion.
+     * <p>
+     *  Revert {@link Statement} insertion in {@link BlockStmt}.
+     *  
+     *  This method removes the inserted node from the patch AST.
+     *  This returns a {@link ModifiedNode} represents the inserted node in patch AST.
+     * 
+     *  Call {@link Instrumenter#rollbackInsertion} after the instrumentation.
+     * 
+     *  Note: `insertedNode` should be in the patch AST and not in the original AST.
+     * </p>
+     * @param insertedNode inserted node, in patch AST
+     * @return information of inserted node
+     * @see Instrumenter#rollbackInsertion
+     */
     protected ModifiedNode revertInsertion(Node insertedNode) {
         if (!(insertedNode instanceof Statement)){
             throw new RuntimeException("Inserted node should be Statement.");
@@ -399,6 +514,25 @@ public class Instrumenter {
         return modifiedNode;
     }
 
+    /**
+     * Revert update.
+     * <p>
+     *  Revert update {@link Statement}, initializer of {@link FieldDeclaration} or initializer of {@link VariableDeclaraionExpr}.
+     * 
+     *  If the arguments are {@link FieldDeclaration} or {@link VariableDeclaraionExpr}, this method will remove the initializer of the arguments.
+     *  If the arguments are {@link Statement}, this method will replace the statement with the original statement.
+     * 
+     *  This method returns 2 {@link ModifiedNode} represents and updated nodes in original and patched AST.
+     * 
+     *  Call {@link Instrumenter#rollbackUpdate} after the instrumentation.
+     * 
+     *  Note: `beforeNode` and `afterNode` should be in the original and patch AST respectively.
+     * </p>
+     * @param beforeNode original node, in original AST
+     * @param afterNode updated node, in patch AST
+     * @return information of original and updated node
+     * @see Instrumenter#rollbackUpdate
+     */
     protected Pair<ModifiedNode,ModifiedNode> revertUpdate(Node beforeNode,Node afteNode) {
         if (beforeNode instanceof VariableDeclarator){
             // Update field or variable declaration
@@ -672,6 +806,14 @@ public class Instrumenter {
         throw new RuntimeException("RevertUpdateVisitor can only handle VariableDeclarator or Statement.");
     }
 
+    /**
+     * Rollback move of a node from a location to another location in a {@link BlockStmt}.
+     * <p>
+     *  This method return back the node to its original location.
+     * </p>
+     * @param movedInfos information of the moved node
+     * @see Instrumenter#revertMove
+     */
     protected void rollbackMove(Pair<ModifiedNode,ModifiedNode> movedInfos) {
         // A node is moved from a block to another block.
         ModifiedNode beforeMoved=movedInfos.a;
@@ -683,6 +825,14 @@ public class Instrumenter {
         blockTo.getStatements().add(afterMoved.index, (Statement)afterMoved.node);
     }
 
+    /**
+     * Rollback removal patch in {@link BlockStmt} or {@link TypeDeclaration}.
+     * <p>
+     *  This method return back the removed node in original AST.
+     * </p>
+     * @param removedInfo information of the removed node in the patched AST
+     * @see Instrumenter#revertRemoval
+     */
     protected void rollbackRemoval(ModifiedNode removedInfo) {
         if (removedInfo.node instanceof MethodDeclaration){
             // Removal method declaration
@@ -715,6 +865,14 @@ public class Instrumenter {
         }
     }
 
+    /**
+     * Rollback insertion patch in {@link BlockStmt}.
+     * <p>
+     *  This method return back the inserted node in patched AST.
+     * </p>
+     * @param insertedInfo information of the inserted node in the patched AST
+     * @see Instrumenter#revertInsertion
+     */
     protected void rollbackInsertion(ModifiedNode insertedInfo) {
         if (!(insertedInfo.node instanceof Statement)){
             throw new RuntimeException("Inserted node should be Statement.");
@@ -732,6 +890,15 @@ public class Instrumenter {
             block.getStatements().addAfter((Statement) insertedInfo.node, (Statement) insertedInfo.beforeNode);
     }
 
+    /**
+     * Rollback update patch in {@link Statement}, {@link FieldDeclaration} or {@link VariableDeclarationExpr}.
+     * <p>
+     *  This method return back the initializer if {@link FieldDeclaration} or {@link VariableDeclarationExpr}.
+     *  This method return back the child node if {@link Statement}.
+     * </p>
+     * @param updatedInfos information of the updated node
+     * @see Instrumenter#revertUpdate
+     */
     protected void rollbackUpdate(Pair<ModifiedNode,ModifiedNode> updatedInfos) {
         ModifiedNode beforeUpdated=updatedInfos.a;
         ModifiedNode afterUpdated=updatedInfos.b;

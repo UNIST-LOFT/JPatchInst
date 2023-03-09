@@ -9,14 +9,24 @@ import java.util.Map;
  * Handler for instrumented codes.
  * <p>
  *  Instrumented code will execute this class.
- *  This class should be included in the ClassPath and do not instrument this class.
+ * 
+ *  Before run the intrumented code, add this class to the CLASSPATH.
+ * 
+ *  This class counts the executed number of each branch and saves to file.
  * </p>
  * @author Youngjae Kim
+ * @see OriginalSourceVisitor
+ * @see TargetSourceVisitor
+ * @see PatchedSourceVisitor
  */
 public class GlobalStates {
+  /** Full name of this class */
   public static final String STATE_CLASS_NAME="kr.ac.unist.apr.GlobalStates";
+  /** wrapper method name of conditional expression */
   public static final String STATE_COND_METHOD="wrapConditionExpr";
+  /** wrapper method name of switch-case */
   public static final String STATE_BRANCH_METHOD="wrapSwitchEntry";
+  /** method name to save the info */
   public static final String STATE_SAVE_INFO="saveBranchInfo";
   
   /**
@@ -30,7 +40,7 @@ public class GlobalStates {
   private static Map<Long,Long> branchInfos=new HashMap<>();
 
   /**
-   * Wrapper for condition expression (IfStmt, ForStmt, WhileStmt).
+   * Wrapper for condition expression (IfStmt, ForStmt, WhileStmt, DoStmt).
    * <p>
    *  Wrap the condition expression of IfStmt, ForStmt, WhileStmt with this method.
    *  This method returns exactly same result of the condition expression.
@@ -58,6 +68,17 @@ public class GlobalStates {
     return condition;
   }
 
+  /**
+   * Wrapper for SwitchEntry (i.e. case and default).
+   * <p>
+   *  Insert this method at the first at the body of the SwitchEntry.
+   * 
+   *  This method records branch counter if GREYBOX_BRANCH environment variable is set to 1.
+   *  If GREYBOX_BRANCH is set to 1, GREYBOX_RESULT environment variable should be set to the path of the result file.
+   * </p>
+   * @param id ID of the branch
+   * @see GlobalStates#wrapConditionExpr(boolean, long, long)
+   */
   public static void wrapSwitchEntry(long id){
     if (System.getenv("GREYBOX_BRANCH").equals("1")) {
       setBranchInfo(id);
@@ -66,7 +87,7 @@ public class GlobalStates {
   }
 
   /**
-   * Add/increment branch counter.
+   * Increment branch counter.
    * @param id static ID
    */
   private static void setBranchInfo(long id){
@@ -83,6 +104,11 @@ public class GlobalStates {
   
   /**
    * Save branch counter to the file.
+   * <p>
+   *  The file path is set by GREYBOX_RESULT environment variable.
+   *  
+   *  Note that this method does not check GREYBOX_BRANCH environment variable.
+   * </p>
    */
   private static void saveBranchInfo() {
     try {
