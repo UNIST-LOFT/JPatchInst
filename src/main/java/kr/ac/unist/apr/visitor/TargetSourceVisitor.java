@@ -22,7 +22,6 @@ import com.github.javaparser.ast.stmt.IfStmt;
 import com.github.javaparser.ast.stmt.Statement;
 import com.github.javaparser.ast.stmt.SwitchEntry;
 import com.github.javaparser.ast.stmt.WhileStmt;
-import com.github.javaparser.ast.visitor.NoCommentEqualsVisitor;
 import com.github.javaparser.ast.visitor.TreeVisitor;
 
 import kr.ac.unist.apr.GlobalStates;
@@ -39,8 +38,7 @@ public class TargetSourceVisitor extends TreeVisitor {
 
     private List<Long> getIds(Node node) {
         for (Node n:nodeToId.keySet()) {
-            NoCommentEqualsVisitor equalsVisitor=new NoCommentEqualsVisitor();
-            boolean isEqual=n.accept(equalsVisitor, node);
+            boolean isEqual=n.equals(node);
             if (isEqual){
                 computed.add(n);
                 return nodeToId.get(n);
