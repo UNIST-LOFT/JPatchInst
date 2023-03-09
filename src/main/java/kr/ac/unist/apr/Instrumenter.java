@@ -281,8 +281,8 @@ public class Instrumenter {
             int indexFrom=blockFrom.getStatements().indexOf(movedFromOriginal);
             int indexTo=blockTo.getStatements().indexOf(movedToPatch);
 
-            blockFrom.getStatements().remove(movedFromOriginal);
             blockTo.getStatements().remove(movedToPatch);
+            blockTo.getStatements().add(indexFrom, (Statement) movedToPatch);
 
             ModifiedNode beforeNode,afterNode;
             if (indexFrom==0){
@@ -299,7 +299,7 @@ public class Instrumenter {
                 afterNode=new ModifiedNode(movedToPatch,indexTo,blockTo,blockTo.getStatements().get(indexTo-1));
             }
 
-            return new Pair<Instrumenter.ModifiedNode,Instrumenter.ModifiedNode>(afterNode, beforeNode);
+            return new Pair<Instrumenter.ModifiedNode,Instrumenter.ModifiedNode>(beforeNode, afterNode);
         }
         else{
             throw new RuntimeException("RevertMoveVisitor can only handle statement that moved in BlockStmt.");
@@ -453,17 +453,8 @@ public class Instrumenter {
         BlockStmt blockFrom=(BlockStmt)beforeMoved.parent;
         BlockStmt blockTo=(BlockStmt)afterMoved.parent;
 
-        if (beforeMoved.index==0){
-            blockFrom.getStatements().addFirst((Statement)beforeMoved.node);
-        }
-        else{
-            blockFrom.getStatements().addAfter((Statement)beforeMoved.node, (Statement)beforeMoved.beforeNode);
-        }
-        
-        if (afterMoved.index==0)
-            blockTo.getStatements().addFirst((Statement)afterMoved.node);
-        else
-            blockTo.getStatements().addAfter((Statement)afterMoved.node, (Statement)afterMoved.beforeNode);
+        blockTo.getStatements().remove(afterMoved.node);
+        blockTo.getStatements().add(afterMoved.index, (Statement)afterMoved.node);
     }
 
     protected void rollbackRemoval(ModifiedNode removedInfo) {
