@@ -7,11 +7,13 @@ import java.util.Map;
 
 import com.github.javaparser.ast.Node;
 import com.github.javaparser.ast.stmt.DoStmt;
+import com.github.javaparser.ast.stmt.ForEachStmt;
 import com.github.javaparser.ast.stmt.ForStmt;
 import com.github.javaparser.ast.stmt.IfStmt;
 import com.github.javaparser.ast.stmt.SwitchEntry;
 import com.github.javaparser.ast.stmt.WhileStmt;
 import com.github.javaparser.ast.visitor.TreeVisitor;
+import com.github.javaparser.utils.Pair;
 
 /**
  * This visitor is used to find the branch IDs of each node.
@@ -26,14 +28,16 @@ import com.github.javaparser.ast.visitor.TreeVisitor;
  */
 public class OriginalSourceVisitor extends TreeVisitor {
     private static long currentId=0;
-    private Map<Node,List<Long>> nodeToId;
+    private List<Node> nodes;
+    private List<List<Long>> ids;
 
     /**
      * Default constructor.
      */
     public OriginalSourceVisitor() {
         super();
-        nodeToId = new HashMap<>();
+        nodes=new ArrayList<>();
+        ids=new ArrayList<>();
     }
 
     /**
@@ -42,29 +46,37 @@ public class OriginalSourceVisitor extends TreeVisitor {
      * @see TargetSourceVisitor#TargetSourceVisitor(Map)
      * @see PatchedSourceVisitor#PatchedSourceVisitor(Map)
      */
-    public Map<Node,List<Long>> getNodeToId(){
-        return nodeToId;
-    }
-
-    /**
-     * Add branch IDs for the given conditional expression.
-     * @param node conditional expression
-     */
-    private void addConditionalId(Node node) {
-        List<Long> ids=new ArrayList<>();
-        ids.add(currentId++);
-        ids.add(currentId++);
-        nodeToId.put(node,ids);
+    public Pair<List<Node>,List<List<Long>>> getNodeToId(){
+        return new Pair<List<Node>,List<List<Long>>>(nodes, ids);
     }
 
     @Override
     public void process(Node node) {
-        if (node instanceof IfStmt || node instanceof ForStmt || node instanceof WhileStmt || node instanceof DoStmt)
-            addConditionalId(node);
+        if (node instanceof IfStmt) {
+            IfStmt ifStmt=(IfStmt) node;
+
+            // Then branch
+            List<Long> ids=new ArrayList<>();
+            ids.add(currentId++);
+
+            // Else branch
+            if (ifStmt.hasElseBranch())
+                ids.add(currentId++);
+            
+            nodes.add(node);
+            this.ids.add(ids);
+        }
+        if (node instanceof ForStmt || node instanceof WhileStmt || node instanceof DoStmt || node instanceof ForEachStmt){
+            List<Long> ids=new ArrayList<>();
+            ids.add(currentId++);
+            nodes.add(node);
+            this.ids.add(ids);
+        }
         else if (node instanceof SwitchEntry) {
             List<Long> ids=new ArrayList<>();
             ids.add(currentId++);
-            nodeToId.put(node,ids);
+            nodes.add(node);
+            this.ids.add(ids);
         }
     }
 }

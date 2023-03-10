@@ -7,6 +7,7 @@ import java.io.FileWriter;
 import java.io.IOException;
 import java.lang.reflect.Method;
 import java.util.ArrayList;
+import java.util.Arrays;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
@@ -14,6 +15,7 @@ import java.util.Set;
 import java.util.logging.Level;
 
 import com.github.gumtreediff.gen.javaparser.JavaParserGenerator;
+import com.github.gumtreediff.matchers.MappingStore;
 import com.github.gumtreediff.matchers.Matcher;
 import com.github.gumtreediff.matchers.Matchers;
 import com.github.gumtreediff.tree.ITree;
@@ -25,9 +27,14 @@ import com.github.javaparser.ast.body.MethodDeclaration;
 import com.github.javaparser.ast.body.TypeDeclaration;
 import com.github.javaparser.ast.body.VariableDeclarator;
 import com.github.javaparser.ast.expr.Expression;
+import com.github.javaparser.ast.expr.LongLiteralExpr;
+import com.github.javaparser.ast.expr.MethodCallExpr;
+import com.github.javaparser.ast.expr.NameExpr;
 import com.github.javaparser.ast.expr.VariableDeclarationExpr;
 import com.github.javaparser.ast.stmt.BlockStmt;
 import com.github.javaparser.ast.stmt.DoStmt;
+import com.github.javaparser.ast.stmt.ExpressionStmt;
+import com.github.javaparser.ast.stmt.ForEachStmt;
 import com.github.javaparser.ast.stmt.ForStmt;
 import com.github.javaparser.ast.stmt.IfStmt;
 import com.github.javaparser.ast.stmt.Statement;
@@ -35,6 +42,7 @@ import com.github.javaparser.ast.stmt.SwitchEntry;
 import com.github.javaparser.ast.stmt.WhileStmt;
 import com.github.javaparser.utils.Pair;
 
+import javassist.bytecode.analysis.ControlFlow.Block;
 import kr.ac.unist.apr.gumtree.MyRootsClassifier;
 import kr.ac.unist.apr.utils.Path;
 import kr.ac.unist.apr.visitor.OriginalSourceVisitor;
@@ -59,7 +67,7 @@ public class Instrumenter {
     private TreeContext patchedRootNode;
     private Map<String,TreeContext> targetNodes=new HashMap<>(); // this list do not contain patched source
     private Map<String,TreeContext> originalNodes=new HashMap<>(); // this list do not contain patched source
-    private Map<String,Map<Node,List<Long>>> originalNodeToId=new HashMap<>();
+    private Map<String,Pair<List<Node>,List<List<Long>>>> nodeToId=new HashMap<>();
 
     private String originalSourcePath;
     private String targetSourcePath;
@@ -99,6 +107,7 @@ public class Instrumenter {
         // generate AST for original source
         List<String> allOriginalSources=Path.getAllSources(new File(originalSourcePath));
         for (String source:allOriginalSources){
+            if (source.contains("kr/ac/unist/apr")) continue;
             JavaParserGenerator parser = new JavaParserGenerator();
             FileReader fReader = new FileReader(source);
             BufferedReader bReader = new BufferedReader(fReader);
@@ -116,6 +125,7 @@ public class Instrumenter {
         // generate AST for patched source
         List<String> allSources=Path.getAllSources(new File(targetSourcePath));
         for (String source:allSources){
+            if (source.contains("kr/ac/unist/apr")) continue;
             JavaParserGenerator parser = new JavaParserGenerator();
             FileReader fReader = new FileReader(source);
             BufferedReader bReader = new BufferedReader(fReader);
@@ -157,21 +167,30 @@ public class Instrumenter {
         Main.LOGGER.log(Level.INFO, "Gen IDs from original ASTs...");
         OriginalSourceVisitor originalSourceVisitor=new OriginalSourceVisitor();
         originalSourceVisitor.visitPreOrder(originalRootNode.getRoot().getJParserNode());
-        originalNodeToId.put(originalFilePath, originalSourceVisitor.getNodeToId());
+        nodeToId.put(originalFilePath, originalSourceVisitor.getNodeToId());
 
         for (Map.Entry<String,TreeContext> originalCtxt:originalNodes.entrySet()){
             originalSourceVisitor=new OriginalSourceVisitor();
             originalSourceVisitor.visitPreOrder(originalCtxt.getValue().getRoot().getJParserNode());
-            originalNodeToId.put(originalCtxt.getKey(), originalSourceVisitor.getNodeToId());
+            nodeToId.put(originalCtxt.getKey(), originalSourceVisitor.getNodeToId());
         }
 
         // Instrument target program without patched file
         Main.LOGGER.log(Level.INFO, "Instrument target program except patched file...");
         for (Map.Entry<String,TreeContext> targetCtxt:targetNodes.entrySet()){
-            TargetSourceVisitor instrumenterVisitor=new TargetSourceVisitor(originalNodeToId.get(targetCtxt.getKey().
+            TargetSourceVisitor instrumenterVisitor=new TargetSourceVisitor(nodeToId.get(targetCtxt.getKey().
                         replace(targetSourcePath, originalSourcePath)));
             Node targetNode=targetCtxt.getValue().getRoot().getJParserNode();
             instrumenterVisitor.visitPreOrder(targetNode);
+            Pair<List<Node>,List<List<Long>>> finalIds=instrumenterVisitor.getResult();
+            for (int i=0;i<finalIds.a.size();i++){
+                Node node=finalIds.a.get(i);
+                List<Long> ids=finalIds.b.get(i);
+                if (node instanceof SwitchEntry)
+                    instrumentSwitchCase((SwitchEntry) node, ids);
+                else
+                    instrumentCondition((Statement) node, ids);
+            }
             
             // Save instrumented file
             FileWriter writer = new FileWriter(targetCtxt.getKey());
@@ -253,9 +272,19 @@ public class Instrumenter {
 
         // Instrument patched source
         Main.LOGGER.log(Level.INFO, "Instrument patched file...");
-        PatchedSourceVisitor patchedSourceVisitor=new PatchedSourceVisitor(originalNodeToId.get(originalFilePath));
+        PatchedSourceVisitor patchedSourceVisitor=new PatchedSourceVisitor(nodeToId.get(originalFilePath));
         patchedSourceVisitor.visitPreOrder(patchedRootNode.getRoot().getJParserNode());
         
+        Pair<List<Node>,List<List<Long>>> finalIds=patchedSourceVisitor.getResult();
+        for (int i=0;i<finalIds.a.size();i++){
+            Node node=finalIds.a.get(i);
+            List<Long> ids=finalIds.b.get(i);
+            if (node instanceof SwitchEntry)
+                instrumentSwitchCase((SwitchEntry) node, ids);
+            else
+                instrumentCondition((Statement) node, ids);
+        }
+
         // Rollback changes in patched AST
         Main.LOGGER.log(Level.INFO, "Roll back reverted ASTs...");
         if (dstAddSet.size()>0){
@@ -814,6 +843,32 @@ public class Instrumenter {
                 ModifiedNode afterModified=new ModifiedStmt(curAfter,whileAfter,methodGetter,methodSetter);
                 return new Pair<ModifiedNode,ModifiedNode>(beforeModified, afterModified);
             }
+            else if (curBefore.getParentNode().get() instanceof ForEachStmt) {
+                // Handle while statement
+                ForEachStmt whileBefore=(ForEachStmt)curBefore.getParentNode().get();
+                ForEachStmt whileAfter=(ForEachStmt)curAfter.getParentNode().get();
+
+                Method methodGetter=null;
+                Method methodSetter=null;
+                if (whileBefore.getBody().equals(curBefore)){
+                    try {
+                        methodGetter=whileBefore.getClass().getMethod("getBody");
+                        methodSetter=whileBefore.getClass().getMethod("setBody",Statement.class);
+
+                        whileAfter.setBody((Statement) curBefore);
+                    } catch (NoSuchMethodException | SecurityException e) {
+                        e.printStackTrace();
+                        System.exit(1);
+                    }
+                }
+                else{
+                    throw new RuntimeException("RevertUpdate can only handle body/condition for WhileStmt.");
+                }
+
+                ModifiedNode beforeModified=new ModifiedStmt(curBefore,whileBefore,methodGetter,methodSetter);
+                ModifiedNode afterModified=new ModifiedStmt(curAfter,whileAfter,methodGetter,methodSetter);
+                return new Pair<ModifiedNode,ModifiedNode>(beforeModified, afterModified);
+            }
             else if (curBefore.getParentNode().get() instanceof SwitchEntry) {
                 // Handle while statement
                 SwitchEntry caseBefore=(SwitchEntry)curBefore.getParentNode().get();
@@ -867,8 +922,15 @@ public class Instrumenter {
         BlockStmt blockFrom=(BlockStmt)beforeMoved.parent;
         BlockStmt blockTo=(BlockStmt)afterMoved.parent;
 
-        blockTo.getStatements().remove(afterMoved.node);
-        blockTo.getStatements().add(afterMoved.index, (Statement)afterMoved.node);
+        if (blockFrom.getStatements().size()==blockTo.getStatements().size()){
+            blockTo.getStatements().remove(afterMoved.node);
+            blockTo.getStatements().add(afterMoved.index, (Statement)afterMoved.node);
+        }
+        else{
+            blockTo.getStatements().remove(afterMoved.node);
+            blockTo.getStatements().add(afterMoved.index+1, (Statement)afterMoved.node);
+        }
+        
     }
 
     /**
@@ -904,10 +966,18 @@ public class Instrumenter {
             BlockStmt block=(BlockStmt)removedInfo.parent;
             int index=removedInfo.index;
             
-            if (index==0)
-                block.getStatements().addFirst((Statement)removedInfo.node);
-            else
-                block.getStatements().addAfter((Statement)removedInfo.node, (Statement)removedInfo.beforeNode);
+            if (block.getStatements().get(0).toString().startsWith("kr.ac.unist.apr")){
+                if (index==0)
+                    block.getStatements().add(1,(Statement)removedInfo.node);
+                else
+                    block.getStatements().addAfter((Statement)removedInfo.node, (Statement)removedInfo.beforeNode);    
+            }
+            else{
+                if (index==0)
+                    block.getStatements().addFirst((Statement)removedInfo.node);
+                else
+                    block.getStatements().addAfter((Statement)removedInfo.node, (Statement)removedInfo.beforeNode);
+            }
         }
     }
 
@@ -930,10 +1000,18 @@ public class Instrumenter {
         BlockStmt block=(BlockStmt)insertedInfo.parent;
         int index=insertedInfo.index;
         
-        if (index==0)
-            block.getStatements().addFirst((Statement) insertedInfo.node);
-        else
-            block.getStatements().addAfter((Statement) insertedInfo.node, (Statement) insertedInfo.beforeNode);
+        if (block.getStatements().get(0).toString().startsWith("kr.ac.unist.apr")){
+            if (index==0)
+                block.getStatements().add(1,(Statement) insertedInfo.node);
+            else
+                block.getStatements().addAfter((Statement) insertedInfo.node, (Statement) insertedInfo.beforeNode);
+        }
+        else{
+            if (index==0)
+                block.getStatements().addFirst((Statement) insertedInfo.node);
+            else
+                block.getStatements().addAfter((Statement) insertedInfo.node, (Statement) insertedInfo.beforeNode);
+        }
     }
 
     /**
@@ -979,11 +1057,15 @@ public class Instrumenter {
         else if (beforeUpdated.node instanceof Statement){
             if (beforeUpdated.parent instanceof BlockStmt){
                 // Update normal statement
+                BlockStmt blockBefore=(BlockStmt)beforeUpdated.parent;
                 BlockStmt blockAfter=(BlockStmt)afterUpdated.parent;
                 int indexBefore=beforeUpdated.index;
                 int indexAfter=afterUpdated.index;
                 assert indexBefore==indexAfter;
-                blockAfter.getStatements().set(indexAfter, (Statement)afterUpdated.node);
+                if (blockBefore.getStatements().size()==blockAfter.getStatements().size())
+                    blockAfter.getStatements().set(indexAfter, (Statement)afterUpdated.node);
+                else
+                    blockAfter.getStatements().set(indexAfter+1, (Statement)afterUpdated.node);
             }
             else if (beforeUpdated.parent instanceof IfStmt) {
                 ModifiedStmt beforeModified=(ModifiedStmt)beforeUpdated;
@@ -991,10 +1073,12 @@ public class Instrumenter {
 
                 IfStmt ifStmt=(IfStmt)afterModified.parent;
                 if (beforeModified.nodeGetter.getName().equals("getThenStmt")) {
-                    ifStmt.setThenStmt((Statement) afterModified.node);
+                    BlockStmt body=(BlockStmt)ifStmt.getThenStmt();
+                    body.getStatements().set(1, (Statement) afterModified.node);
                 }
                 else if (beforeModified.nodeGetter.getName().equals("getElseStmt")) {
-                    ifStmt.setElseStmt((Statement) afterModified.node);
+                    BlockStmt body=(BlockStmt)ifStmt.getElseStmt().get();
+                    body.getStatements().set(1, (Statement) afterModified.node);
                 }
                 else if (beforeModified.nodeGetter.getName().equals("getCondition")) {
                     ifStmt.setCondition((Expression) afterModified.node);
@@ -1009,7 +1093,8 @@ public class Instrumenter {
 
                 WhileStmt whileStmt=(WhileStmt)afterModified.parent;
                 if (beforeModified.nodeGetter.getName().equals("getBody")) {
-                    whileStmt.setBody((Statement) afterModified.node);
+                    BlockStmt body=(BlockStmt)whileStmt.getBody();
+                    body.getStatements().set(1, (Statement) afterModified.node);
                 }
                 else if (beforeModified.nodeGetter.getName().equals("getCondition")) {
                     whileStmt.setCondition((Expression) afterModified.node);
@@ -1024,7 +1109,8 @@ public class Instrumenter {
 
                 ForStmt forStmt=(ForStmt)afterModified.parent;
                 if (beforeModified.nodeGetter.getName().equals("getBody")) {
-                    forStmt.setBody((Statement) afterModified.node);
+                    BlockStmt body=(BlockStmt)forStmt.getBody();
+                    body.getStatements().set(1, (Statement) afterModified.node);
                 }
                 else if (beforeModified.nodeGetter.getName().equals("getCompare")) {
                     forStmt.setCompare((Expression) afterModified.node);
@@ -1049,7 +1135,8 @@ public class Instrumenter {
 
                 DoStmt whileStmt=(DoStmt)afterModified.parent;
                 if (beforeModified.nodeGetter.getName().equals("getBody")) {
-                    whileStmt.setBody((Statement) afterModified.node);
+                    BlockStmt body=(BlockStmt)whileStmt.getBody();
+                    body.getStatements().set(1, (Statement) afterModified.node);
                 }
                 else if (beforeModified.nodeGetter.getName().equals("getCondition")) {
                     whileStmt.setCondition((Expression) afterModified.node);
@@ -1058,7 +1145,19 @@ public class Instrumenter {
                     throw new RuntimeException("RevertUpdateVisitor can only handle VariableDeclarator or Statement.");
                 }
             }
+            else if (beforeUpdated.parent instanceof ForEachStmt) {
+                ModifiedStmt beforeModified=(ModifiedStmt)beforeUpdated;
+                ModifiedStmt afterModified=(ModifiedStmt)afterUpdated;
 
+                ForEachStmt whileStmt=(ForEachStmt)afterModified.parent;
+                if (beforeModified.nodeGetter.getName().equals("getBody")) {
+                    BlockStmt body=(BlockStmt)whileStmt.getBody();
+                    body.getStatements().set(1, (Statement) afterModified.node);
+                }
+                else {
+                    throw new RuntimeException("RevertUpdateVisitor can only handle VariableDeclarator or Statement.");
+                }
+            }
             else if (beforeUpdated.parent instanceof SwitchEntry) {
                 ModifiedStmt beforeModified=(ModifiedStmt)beforeUpdated;
                 ModifiedStmt afterModified=(ModifiedStmt)afterUpdated;
@@ -1066,7 +1165,7 @@ public class Instrumenter {
                 SwitchEntry switchEntry=(SwitchEntry)afterModified.parent;
                 if (beforeModified.nodeGetter.getName().equals("getStatements")) {
                     NodeList<Statement> stmtList=switchEntry.getStatements();
-                    stmtList.set(afterModified.index, (Statement) afterModified.node);
+                    stmtList.set(afterModified.index+1, (Statement) afterModified.node);
                     switchEntry.setStatements(stmtList);
                 }
                 else {
@@ -1080,4 +1179,152 @@ public class Instrumenter {
     }
 
 
+    /**
+     * Generate a wrapper method call expression for the given condition.
+     * @param condition condition to be wrapped
+     * @param parentNode parent node of the condition
+     * @return wrapper method call expression for the given condition.
+     * @see GlobalStates#wrapConditionExpr
+     */
+    private MethodCallExpr genWrapper(long id) {
+        NameExpr classAccess=new NameExpr(GlobalStates.STATE_CLASS_NAME);
+        String methodName=GlobalStates.STATE_BRANCH_METHOD;
+        List<Expression> args=Arrays.asList(new LongLiteralExpr(Long.toString(id)));
+
+        MethodCallExpr wrapperCaller= new MethodCallExpr(classAccess, methodName, new NodeList<>(args));
+        return wrapperCaller;
+    }
+
+    /**
+     * Instrument the given statement.
+     * @param stmt {@link IfStmt}, {@link ForStmt}, {@link WhileStmt} or {@link DoStmt}.
+     */
+    private void instrumentCondition(Statement stmt,List<Long> ids) {
+        if (stmt instanceof IfStmt) {
+            // if statement
+            IfStmt ifStmt=(IfStmt)stmt;
+            
+            // Then branch
+            Statement thenStmt=ifStmt.getThenStmt();
+            if (thenStmt instanceof BlockStmt){
+                BlockStmt thenBlock=(BlockStmt)thenStmt;
+                thenBlock.getStatements().addFirst(new ExpressionStmt(genWrapper(ids.get(0))));
+            }
+            else {
+                NodeList<Statement> thenStmts=new NodeList<>();
+                thenStmts.add(new ExpressionStmt(genWrapper(ids.get(0))));
+                thenStmts.add(thenStmt);
+                BlockStmt thenBlock=new BlockStmt(thenStmts);
+                ifStmt.setThenStmt(thenBlock);
+            }
+
+            // Else branch
+            if (ifStmt.hasElseBranch()){
+                Statement elseStmt=ifStmt.getElseStmt().get();
+                if (elseStmt instanceof BlockStmt){
+                    BlockStmt elseBlock=(BlockStmt)elseStmt;
+                    elseBlock.getStatements().addFirst(new ExpressionStmt(genWrapper(ids.get(1))));
+                }
+                else {
+                    NodeList<Statement> elseStmts=new NodeList<>();
+                    elseStmts.add(new ExpressionStmt(genWrapper(ids.get(1))));
+                    elseStmts.add(elseStmt);
+                    BlockStmt elseBlock=new BlockStmt(elseStmts);
+                    ifStmt.setElseStmt(elseBlock);
+                }
+            }
+        }
+        else if (stmt instanceof ForStmt) {
+            // for statement
+            ForStmt forStmt=(ForStmt)stmt;
+
+            // Instrument
+            Statement body=forStmt.getBody();
+            if (body instanceof BlockStmt){
+                BlockStmt bodyBlock=(BlockStmt)body;
+                bodyBlock.getStatements().addFirst(new ExpressionStmt(genWrapper(ids.get(0))));
+            }
+            else {
+                NodeList<Statement> bodyStmts=new NodeList<>();
+                bodyStmts.add(new ExpressionStmt(genWrapper(ids.get(0))));
+                bodyStmts.add(body);
+                BlockStmt bodyBlock=new BlockStmt(bodyStmts);
+                forStmt.setBody(bodyBlock);
+            }
+        }
+        else if (stmt instanceof WhileStmt) {
+            // while statement
+            WhileStmt whileStmt=(WhileStmt)stmt;
+
+            // Instrument
+            Statement body=whileStmt.getBody();
+            if (body instanceof BlockStmt){
+                BlockStmt bodyBlock=(BlockStmt)body;
+                bodyBlock.getStatements().addFirst(new ExpressionStmt(genWrapper(ids.get(0))));
+            }
+            else {
+                NodeList<Statement> bodyStmts=new NodeList<>();
+                bodyStmts.add(new ExpressionStmt(genWrapper(ids.get(0))));
+                bodyStmts.add(body);
+                BlockStmt bodyBlock=new BlockStmt(bodyStmts);
+                whileStmt.setBody(bodyBlock);
+            }
+        }
+        else if (stmt instanceof DoStmt) {
+            // do-while statement
+            DoStmt doStmt=(DoStmt)stmt;
+
+            // Instrument
+            Statement body=doStmt.getBody();
+            if (body instanceof BlockStmt){
+                BlockStmt bodyBlock=(BlockStmt)body;
+                bodyBlock.getStatements().addFirst(new ExpressionStmt(genWrapper(ids.get(0))));
+            }
+            else {
+                NodeList<Statement> bodyStmts=new NodeList<>();
+                bodyStmts.add(new ExpressionStmt(genWrapper(ids.get(0))));
+                bodyStmts.add(body);
+                BlockStmt bodyBlock=new BlockStmt(bodyStmts);
+                doStmt.setBody(bodyBlock);
+            }
+        }
+        else if (stmt instanceof ForEachStmt) {
+            ForEachStmt forEachStmt=(ForEachStmt)stmt;
+
+            // Instrument
+            Statement body=forEachStmt.getBody();
+            if (body instanceof BlockStmt){
+                BlockStmt bodyBlock=(BlockStmt)body;
+                bodyBlock.getStatements().addFirst(new ExpressionStmt(genWrapper(ids.get(0))));
+            }
+            else {
+                NodeList<Statement> bodyStmts=new NodeList<>();
+                bodyStmts.add(new ExpressionStmt(genWrapper(ids.get(0))));
+                bodyStmts.add(body);
+                BlockStmt bodyBlock=new BlockStmt(bodyStmts);
+                forEachStmt.setBody(bodyBlock);
+            }
+        }
+    }
+
+    /**
+     * Instrument the given {@link SwitchEntry}.
+     * @param switchCase {@link SwitchEntry} to be instrumented.
+     */
+    private void instrumentSwitchCase(SwitchEntry switchCase, List<Long> ids) {
+        if (ids.size()!=1)
+            throw new RuntimeException("Size of IDs for switch case should be 1, but: "+ids.size());
+
+        NameExpr classAccess=new NameExpr(GlobalStates.STATE_CLASS_NAME);
+        String methodName=GlobalStates.STATE_BRANCH_METHOD;
+        List<Expression> args=Arrays.asList(new LongLiteralExpr(Long.toString(ids.get(0))));
+
+        MethodCallExpr newMethod=new MethodCallExpr(classAccess, methodName, new NodeList<>(args));
+        ExpressionStmt newStmt=new ExpressionStmt(newMethod);
+
+        // Add new method call to case/default statement
+        NodeList<Statement> stmts=switchCase.getStatements();
+        stmts.add(0, newStmt);
+        switchCase.setStatements(stmts);
+    }
 }
