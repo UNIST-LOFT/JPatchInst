@@ -25,7 +25,7 @@ import com.github.javaparser.ast.visitor.TreeVisitor;
  * @author Youngjae Kim (FreddyYJ)
  */
 public class OriginalSourceVisitor extends TreeVisitor {
-    private static long currentId;
+    private static long currentId=0;
     private Map<Node,List<Long>> nodeToId;
 
     /**
@@ -34,7 +34,6 @@ public class OriginalSourceVisitor extends TreeVisitor {
     public OriginalSourceVisitor() {
         super();
         nodeToId = new HashMap<>();
-        currentId=0;
     }
 
     /**
