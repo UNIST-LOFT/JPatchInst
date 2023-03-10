@@ -19,7 +19,7 @@ public class Path {
         File[] files = rootDirectory.listFiles();
         for (File file : files) {
             if (file.isDirectory()) {
-                sources.addAll(getAllSources(rootDirectory));
+                sources.addAll(getAllSources(file));
             } else {
                 if (file.getName().endsWith(".java"))
                     sources.add(file.getAbsolutePath());
