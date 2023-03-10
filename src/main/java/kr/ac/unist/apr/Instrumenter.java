@@ -15,7 +15,6 @@ import java.util.Set;
 import java.util.logging.Level;
 
 import com.github.gumtreediff.gen.javaparser.JavaParserGenerator;
-import com.github.gumtreediff.matchers.MappingStore;
 import com.github.gumtreediff.matchers.Matcher;
 import com.github.gumtreediff.matchers.Matchers;
 import com.github.gumtreediff.tree.ITree;
@@ -42,7 +41,6 @@ import com.github.javaparser.ast.stmt.SwitchEntry;
 import com.github.javaparser.ast.stmt.WhileStmt;
 import com.github.javaparser.utils.Pair;
 
-import javassist.bytecode.analysis.ControlFlow.Block;
 import kr.ac.unist.apr.gumtree.MyRootsClassifier;
 import kr.ac.unist.apr.utils.Path;
 import kr.ac.unist.apr.visitor.OriginalSourceVisitor;
