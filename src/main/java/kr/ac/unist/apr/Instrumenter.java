@@ -27,6 +27,7 @@ import com.github.javaparser.ast.body.VariableDeclarator;
 import com.github.javaparser.ast.expr.Expression;
 import com.github.javaparser.ast.expr.VariableDeclarationExpr;
 import com.github.javaparser.ast.stmt.BlockStmt;
+import com.github.javaparser.ast.stmt.DoStmt;
 import com.github.javaparser.ast.stmt.ForStmt;
 import com.github.javaparser.ast.stmt.IfStmt;
 import com.github.javaparser.ast.stmt.Statement;
@@ -60,6 +61,9 @@ public class Instrumenter {
     private Map<String,TreeContext> originalNodes=new HashMap<>(); // this list do not contain patched source
     private Map<String,Map<Node,List<Long>>> originalNodeToId=new HashMap<>();
 
+    private String originalSourcePath;
+    private String targetSourcePath;
+
     /**
      * Default constructor.
      * <p>
@@ -88,6 +92,8 @@ public class Instrumenter {
                     String[] classPaths) throws IOException {
         this.originalFilePath=originalFilePath;
         this.patchedFilePath=patchedFilePath;
+        this.originalSourcePath=originalSourcePath;
+        this.targetSourcePath=targetSourcePath;
 
         Main.LOGGER.log(Level.INFO, "Generate AST for original source...");
         // generate AST for original source
@@ -162,12 +168,14 @@ public class Instrumenter {
         // Instrument target program without patched file
         Main.LOGGER.log(Level.INFO, "Instrument target program except patched file...");
         for (Map.Entry<String,TreeContext> targetCtxt:targetNodes.entrySet()){
-            TargetSourceVisitor instrumenterVisitor=new TargetSourceVisitor(originalNodeToId.get(targetCtxt.getKey()));
+            TargetSourceVisitor instrumenterVisitor=new TargetSourceVisitor(originalNodeToId.get(targetCtxt.getKey().
+                        replace(targetSourcePath, originalSourcePath)));
             Node targetNode=targetCtxt.getValue().getRoot().getJParserNode();
             instrumenterVisitor.visitPreOrder(targetNode);
             
             // Save instrumented file
             FileWriter writer = new FileWriter(targetCtxt.getKey());
+            writer.write("// __INSTRUMENTED__\n");
             writer.write(targetNode.toString());
             writer.close();
         }
@@ -591,6 +599,7 @@ public class Instrumenter {
                     !(curBefore.getParentNode().get() instanceof IfStmt) &&
                     !(curBefore.getParentNode().get() instanceof WhileStmt) &&
                     !(curBefore.getParentNode().get() instanceof ForStmt) &&
+                    !(curBefore.getParentNode().get() instanceof DoStmt) &&
                     !(curBefore.getParentNode().get() instanceof SwitchEntry)){
                 curBefore=curBefore.getParentNode().get();
                 curAfter=curAfter.getParentNode().get();
@@ -766,6 +775,43 @@ public class Instrumenter {
 
                 ModifiedNode beforeModified=new ModifiedStmt(curBefore,indexBefore,forBefore,methodGetter,methodSetter);
                 ModifiedNode afterModified=new ModifiedStmt(curAfter,indexAfter,forAfter,methodGetter,methodSetter);
+                return new Pair<ModifiedNode,ModifiedNode>(beforeModified, afterModified);
+            }
+            else if (curBefore.getParentNode().get() instanceof DoStmt) {
+                // Handle while statement
+                DoStmt whileBefore=(DoStmt)curBefore.getParentNode().get();
+                DoStmt whileAfter=(DoStmt)curAfter.getParentNode().get();
+
+                Method methodGetter=null;
+                Method methodSetter=null;
+                if (whileBefore.getBody().equals(curBefore)){
+                    try {
+                        methodGetter=whileBefore.getClass().getMethod("getBody");
+                        methodSetter=whileBefore.getClass().getMethod("setBody",Statement.class);
+
+                        whileAfter.setBody((Statement) curBefore);
+                    } catch (NoSuchMethodException | SecurityException e) {
+                        e.printStackTrace();
+                        System.exit(1);
+                    }
+                }
+                else if (whileBefore.getCondition().equals(curBefore)){
+                    try {
+                        methodGetter=whileBefore.getClass().getMethod("getCondition");
+                        methodSetter=whileBefore.getClass().getMethod("setCondition",Expression.class);
+
+                        whileAfter.setCondition((Expression) curBefore);
+                    } catch (NoSuchMethodException | SecurityException e) {
+                        e.printStackTrace();
+                        System.exit(1);
+                    }
+                }
+                else{
+                    throw new RuntimeException("RevertUpdate can only handle body/condition for WhileStmt.");
+                }
+
+                ModifiedNode beforeModified=new ModifiedStmt(curBefore,whileBefore,methodGetter,methodSetter);
+                ModifiedNode afterModified=new ModifiedStmt(curAfter,whileAfter,methodGetter,methodSetter);
                 return new Pair<ModifiedNode,ModifiedNode>(beforeModified, afterModified);
             }
             else if (curBefore.getParentNode().get() instanceof SwitchEntry) {
@@ -997,6 +1043,22 @@ public class Instrumenter {
                     throw new RuntimeException("RevertUpdateVisitor can only handle VariableDeclarator or Statement.");
                 }
             }
+            else if (beforeUpdated.parent instanceof DoStmt) {
+                ModifiedStmt beforeModified=(ModifiedStmt)beforeUpdated;
+                ModifiedStmt afterModified=(ModifiedStmt)afterUpdated;
+
+                DoStmt whileStmt=(DoStmt)afterModified.parent;
+                if (beforeModified.nodeGetter.getName().equals("getBody")) {
+                    whileStmt.setBody((Statement) afterModified.node);
+                }
+                else if (beforeModified.nodeGetter.getName().equals("getCondition")) {
+                    whileStmt.setCondition((Expression) afterModified.node);
+                }
+                else {
+                    throw new RuntimeException("RevertUpdateVisitor can only handle VariableDeclarator or Statement.");
+                }
+            }
+
             else if (beforeUpdated.parent instanceof SwitchEntry) {
                 ModifiedStmt beforeModified=(ModifiedStmt)beforeUpdated;
                 ModifiedStmt afterModified=(ModifiedStmt)afterUpdated;

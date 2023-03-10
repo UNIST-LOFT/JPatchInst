@@ -6,6 +6,7 @@ import java.util.List;
 import java.util.Map;
 
 import com.github.javaparser.ast.Node;
+import com.github.javaparser.ast.stmt.DoStmt;
 import com.github.javaparser.ast.stmt.ForStmt;
 import com.github.javaparser.ast.stmt.IfStmt;
 import com.github.javaparser.ast.stmt.SwitchEntry;
@@ -59,7 +60,7 @@ public class OriginalSourceVisitor extends TreeVisitor {
 
     @Override
     public void process(Node node) {
-        if (node instanceof IfStmt || node instanceof ForStmt || node instanceof WhileStmt)
+        if (node instanceof IfStmt || node instanceof ForStmt || node instanceof WhileStmt || node instanceof DoStmt)
             addConditionalId(node);
         else if (node instanceof SwitchEntry) {
             List<Long> ids=new ArrayList<>();
