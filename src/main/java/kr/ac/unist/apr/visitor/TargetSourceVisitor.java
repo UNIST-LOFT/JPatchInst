@@ -17,7 +17,17 @@ import com.github.javaparser.ast.visitor.TreeVisitor;
 import com.github.javaparser.utils.Pair;
 
 /**
- * This visitor is used to instrument the target source code except the patched file.
+ * This visitor finds which nodes should be instrumented and their branch IDs for not patched files.
+ * <p>
+ *  This visitor is only for not patched files.
+ *  To instrument patched files, use {@link PatchedSourceVisitor}.
+ * 
+ *  Before run this visitor, run {@link OriginalSourceVisitor} to get the mapping between nodes and branch IDs.
+ *  
+ *  This visitor instruments IfStmt, SwitchEntry, ForStmt, ForEachStmt, WhileStmt, and DoStmt.
+ *  For IfStmt, it instruments the then and else statements. If the else exist, it has two IDs and otherwise one ID.
+ *  The other statements have only one ID for their body.
+ * </p>
  * @author Youngjae Kim (FreddyYJ)
  */
 public class TargetSourceVisitor extends TreeVisitor {
@@ -97,10 +107,24 @@ public class TargetSourceVisitor extends TreeVisitor {
         throw new RuntimeException("Cannot find node in nodeToId");
     }
 
+    /**
+     * Get the nodes and branch IDs to instrument.
+     * <p>
+     *  Return value is a pair of node list and branch IDs for each node.
+     *  Instrument each nodes with the branch IDs.
+     * </p>
+     * @return the nodes and branch IDs to instrument.
+     */
     public Pair<List<Node>,List<List<Long>>> getResult() {
         return new Pair<>(resultNodes,resultIds);
     }
 
+    /**
+     * Visit the given node.
+     * <p>
+     *  Override this method if you want your own visitor.
+     * </p>
+     */
     @Override
     public void process(Node node) {
         if (node instanceof IfStmt || node instanceof ForStmt || node instanceof WhileStmt || node instanceof DoStmt

@@ -8,9 +8,24 @@ import java.io.IOException;
  * <p>
  *  Instrumented code will execute this class.
  * 
- *  Before run the intrumented code, add this class to the CLASSPATH.
+ *  Before run the intrumented code, add this class to the CLASSPATH or 
+ *       copy this file to source directory of the target project.
  * 
  *  This class counts the executed number of each branch and saves to file.
+ * 
+ *  To use this class, you have to set the following environment variables:
+ *  <ul>
+ *    <li>GREYBOX_BRANCH=1 to count the execution of each branches</li>
+ *    <li>GREYBOX_RESULT=filename to save the result</li>
+ *  </ul>
+ * 
+ *  Note that we do not implement checkers to check these variables are defined.
+ * 
+ *  In result file, each line has two columns which are seperated by comma(,).
+ *  First column is the branch ID and second column is the number of execution of each branch.
+ * 
+ *  This class use Shutdown Hook to save the result, to reduce the overhead.
+ *  It the program is terminated by external signal, the result may not be saved.
  * </p>
  * @author Youngjae Kim
  * @see OriginalSourceVisitor
@@ -30,26 +45,32 @@ public class GlobalStates {
    */
   private static long previousId=0;
 
-
+  // NOTE: We use array instead of Map<> because some benchmarks do not supports them (e.g. Chart)
   /**
-   * Counter for each branches. 
+   * The IDs of the branches.
    */
   private static long[] branchIds=new long[1000000];
+  /**
+   * The counter of the branches.
+   */
   private static long[] branchCounters=new long[1000000];
+  /**
+   * The total number of the branches.
+   */
   private static int totalBranches=0;
   
+  /**
+   * We do not want to add shutdown hook more than once.
+   */
   private static boolean isShutdownHookSet=false;
 
   /**
-   * Wrapper for SwitchEntry (i.e. case and default).
+   * Wrapper for each branch.
    * <p>
-   *  Insert this method at the first at the body of the SwitchEntry.
+   *  This method is called by instrumented code.
    * 
-   *  This method records branch counter if GREYBOX_BRANCH environment variable is set to 1.
-   *  If GREYBOX_BRANCH is set to 1, GREYBOX_RESULT environment variable should be set to the path of the result file.
+   *  This method counts the executed number of each branch.
    * </p>
-   * @param id ID of the branch
-   * @see GlobalStates#wrapConditionExpr(boolean, long, long)
    */
   public static void wrapBranch(long id){
     if (System.getenv("GREYBOX_BRANCH").equals("1")) {

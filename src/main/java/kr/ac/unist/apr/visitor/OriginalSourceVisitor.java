@@ -49,6 +49,13 @@ public class OriginalSourceVisitor extends TreeVisitor {
         return new Pair<List<Node>,List<List<Long>>>(nodes, ids);
     }
 
+    /**
+     * Visit the given node.
+     * <p>
+     *  Override this method if you want your own visitor.
+     * </p>
+     */
+
     @Override
     public void process(Node node) {
         if (node instanceof IfStmt) {
