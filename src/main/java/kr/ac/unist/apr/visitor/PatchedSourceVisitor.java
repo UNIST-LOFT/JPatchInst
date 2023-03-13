@@ -129,14 +129,20 @@ public class PatchedSourceVisitor extends TreeVisitor {
         if (node instanceof IfStmt || node instanceof ForStmt || node instanceof WhileStmt || node instanceof DoStmt
                     || node instanceof ForEachStmt) {  
             // Conditional statements
-            resultNodes.add(node);
-            resultIds.add(getIds(node));
+            List<Long> nodeIds=getIds(node);
+            if (nodeIds!=null){
+                resultNodes.add(node);
+                resultIds.add(nodeIds);
+            }
         }
         else if (node instanceof SwitchEntry) {
             // Switch case/default
             SwitchEntry switchCase=(SwitchEntry)node;
-            resultNodes.add(switchCase);
-            resultIds.add(getIds(switchCase));
+            List<Long> nodeIds=getIds(node);
+            if (nodeIds!=null){
+                resultNodes.add(switchCase);
+                resultIds.add(nodeIds);
+            }
         }
     }
 }
