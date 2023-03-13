@@ -21,6 +21,8 @@ import com.github.gumtreediff.tree.ITree;
 import com.github.gumtreediff.tree.TreeContext;
 import com.github.javaparser.ast.Node;
 import com.github.javaparser.ast.NodeList;
+import com.github.javaparser.ast.body.ClassOrInterfaceDeclaration;
+import com.github.javaparser.ast.body.EnumDeclaration;
 import com.github.javaparser.ast.body.FieldDeclaration;
 import com.github.javaparser.ast.body.MethodDeclaration;
 import com.github.javaparser.ast.body.TypeDeclaration;
@@ -476,15 +478,32 @@ public class Instrumenter {
                 throw new RuntimeException("RevertRemoveVisitor can only handle MethodDecl that removed in Class/Interface Dec.");
             }
 
-            TypeDeclaration typeDecl=(TypeDeclaration)removedNode.getParentNode().get();
-            int index=typeDecl.getMembers().indexOf(removedNode);
-            typeDecl.getMembers().remove(removedNode);
-            ModifiedNode modifiedNode;
-            if (index==0){
-                modifiedNode=new ModifiedNode(removedNode,index,typeDecl,null);
+            ModifiedNode modifiedNode=null;
+            if (removedNode.getParentNode().get() instanceof ClassOrInterfaceDeclaration){
+                ClassOrInterfaceDeclaration typeDecl=(ClassOrInterfaceDeclaration)removedNode.getParentNode().get();
+                int index=typeDecl.getMembers().indexOf(removedNode);
+                typeDecl.getMembers().remove(removedNode);
+                if (index==0){
+                    modifiedNode=new ModifiedNode(removedNode,index,typeDecl,null);
+                }
+                else{
+                    modifiedNode=new ModifiedNode(removedNode,index,typeDecl,typeDecl.getMembers().get(index-1));
+                }
             }
-            else{
-                modifiedNode=new ModifiedNode(removedNode,index,typeDecl,typeDecl.getMembers().get(index-1));
+            else if (removedNode.getParentNode().get() instanceof EnumDeclaration) {
+                EnumDeclaration typeDecl=(EnumDeclaration)removedNode.getParentNode().get();
+                int index=typeDecl.getMembers().indexOf(removedNode);
+                typeDecl.getMembers().remove(removedNode);
+                if (index==0){
+                    modifiedNode=new ModifiedNode(removedNode,index,typeDecl,null);
+                }
+                else{
+                    modifiedNode=new ModifiedNode(removedNode,index,typeDecl,typeDecl.getMembers().get(index-1));
+                }
+            }
+            else {
+                // Ignore AnnotationDeclaration: no method decl, ignore RecordDeclaration: only Java 14+ supported
+                throw new RuntimeException("We only support Class/Interface/Enum method decl.");
             }
 
             return modifiedNode;
@@ -946,11 +965,24 @@ public class Instrumenter {
                 throw new RuntimeException("RevertRemoveVisitor can only handle MethodDecl that removed in Class/Interface Dec.");
             }
 
-            TypeDeclaration typeDecl=(TypeDeclaration)removedInfo.parent;
-            if (removedInfo.index==0)
-                typeDecl.getMembers().addFirst(removedInfo.node);
-            else
-                typeDecl.getMembers().addAfter(removedInfo.node, removedInfo.beforeNode);
+            if (removedInfo.parent instanceof ClassOrInterfaceDeclaration) {
+                ClassOrInterfaceDeclaration typeDecl=(ClassOrInterfaceDeclaration)removedInfo.parent;
+                if (removedInfo.index==0)
+                    typeDecl.getMembers().addFirst((MethodDeclaration) removedInfo.node);
+                else
+                    typeDecl.getMembers().addAfter((MethodDeclaration) removedInfo.node, (MethodDeclaration) removedInfo.beforeNode);
+            }
+            else if (removedInfo.parent instanceof EnumDeclaration) {
+                EnumDeclaration typeDecl=(EnumDeclaration)removedInfo.parent;
+                if (removedInfo.index==0)
+                    typeDecl.getMembers().addFirst((MethodDeclaration) removedInfo.node);
+                else
+                    typeDecl.getMembers().addAfter((MethodDeclaration) removedInfo.node, (MethodDeclaration) removedInfo.beforeNode);
+            }
+            else {
+                // Ignore AnnotationDeclaration: no method decl, ignore RecordDeclaration: only Java 14+ supported
+                throw new RuntimeException("Method removal only supports Class/Interface/Enum.");
+            }
         }
         else{
             // Removal statement

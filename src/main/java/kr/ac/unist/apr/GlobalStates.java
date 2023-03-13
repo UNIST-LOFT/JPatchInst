@@ -30,6 +30,16 @@ public class GlobalStates {
    */
   private static long previousId=0;
 
+
+  /**
+   * Counter for each branches. 
+   */
+  private static long[] branchIds=new long[1000000];
+  private static long[] branchCounters=new long[1000000];
+  private static int totalBranches=0;
+  
+  private static boolean isShutdownHookSet=false;
+
   /**
    * Wrapper for SwitchEntry (i.e. case and default).
    * <p>
@@ -44,15 +54,40 @@ public class GlobalStates {
   public static void wrapBranch(long id){
     if (System.getenv("GREYBOX_BRANCH").equals("1")) {
       long currentKey=id^previousId;
+
+      boolean isFound=false;
+      for (int i=0; i<totalBranches; i++) {
+        if (branchIds[i]==currentKey) {
+          branchCounters[i]++;
+          isFound=true;
+          break;
+        }
+      }
+      if (!isFound) {
+        branchIds[totalBranches]=currentKey;
+        branchCounters[totalBranches]=1;
+        totalBranches++;
+      }
+  
       previousId=id>>1;
 
-      try {
-        String outputFile=System.getenv("GREYBOX_RESULT");
-        FileWriter fw=new FileWriter(outputFile,true);
-        fw.write(Long.toString(currentKey)+"\n");
-        fw.close();
-      } catch (IOException e) {
-        e.printStackTrace();
+      if (!isShutdownHookSet) {
+        Runtime.getRuntime().addShutdownHook(new Thread(new Runnable() {
+          @Override
+          public void run() {
+            try {
+              String outputFile=System.getenv("GREYBOX_RESULT");
+              FileWriter fw=new FileWriter(outputFile,true);
+              for (int i=0;i<totalBranches;i++) {
+                fw.write(Long.toString(branchIds[i])+","+Long.toString(branchCounters[i])+"\n");
+              }
+              fw.close();
+            } catch (IOException e) {
+              e.printStackTrace();
+            }
+          }
+        }));
+        isShutdownHookSet=true;
       }
     }
   }
