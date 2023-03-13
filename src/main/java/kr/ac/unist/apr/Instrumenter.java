@@ -451,7 +451,7 @@ public class Instrumenter {
             return new Pair<Instrumenter.ModifiedNode,Instrumenter.ModifiedNode>(beforeNode, afterNode);
         }
         else{
-            throw new RuntimeException("RevertMoveVisitor can only handle statement that moved in BlockStmt.");
+            throw new RuntimeException("Move operation only supports moving a statement in a block.");
         }
     }
 
@@ -475,7 +475,7 @@ public class Instrumenter {
         if (removedNode instanceof MethodDeclaration){
             // Removal method declaration
             if (!(removedNode.getParentNode().get() instanceof TypeDeclaration)){
-                throw new RuntimeException("RevertRemoveVisitor can only handle MethodDecl that removed in Class/Interface Dec.");
+                throw new RuntimeException("Removing method decl only supports for Class/Interface/Enum.");
             }
 
             ModifiedNode modifiedNode=null;
@@ -503,7 +503,7 @@ public class Instrumenter {
             }
             else {
                 // Ignore AnnotationDeclaration: no method decl, ignore RecordDeclaration: only Java 14+ supported
-                throw new RuntimeException("We only support Class/Interface/Enum method decl.");
+                throw new RuntimeException("Removing method decl only supports for Class/Interface/Enum.");
             }
 
             return modifiedNode;
@@ -511,10 +511,10 @@ public class Instrumenter {
         else{
             // Removal statement
             if (!(removedNode instanceof Statement)){
-                throw new RuntimeException("Inserted node should be Statement.");
+                throw new RuntimeException("Removed node should be Statement.");
             }
             if (!(removedNode.getParentNode().get() instanceof BlockStmt)) {
-                throw new RuntimeException("RevertInsertionVisitor can only handle statement that inserted in BlockStmt.");
+                throw new RuntimeException("Removing statement only supports in the BlockStmt.");
             }
 
             BlockStmt block=(BlockStmt)removedNode.getParentNode().get();
@@ -552,7 +552,7 @@ public class Instrumenter {
             throw new RuntimeException("Inserted node should be Statement.");
         }
         if (!(insertedNode.getParentNode().get() instanceof BlockStmt)) {
-            throw new RuntimeException("RevertInsertionVisitor can only handle statement that inserted in BlockStmt.");
+            throw new RuntimeException("Inserting statement only supports in the BlockStmt.");
         }
 
         BlockStmt block=(BlockStmt)insertedNode.getParentNode().get();
@@ -592,7 +592,7 @@ public class Instrumenter {
             // Update field or variable declaration
             if (!(beforeNode.getParentNode().get() instanceof FieldDeclaration || beforeNode.getParentNode().get() instanceof VariableDeclarationExpr) ||
                             !(afteNode.getParentNode().get() instanceof TypeDeclaration || afteNode.getParentNode().get() instanceof VariableDeclarationExpr)){
-                throw new RuntimeException("Can only handle update field or variable declaration.");
+                throw new RuntimeException("Updating variable decl only supports field/local variable.");
             }
 
             if (beforeNode.getParentNode().get() instanceof FieldDeclaration){
@@ -634,7 +634,7 @@ public class Instrumenter {
                 return new Pair<ModifiedNode,ModifiedNode>(beforeModified, afterModified);
             }
             else{
-                throw new RuntimeException("RevertUpdateVisitor can only handle VariableDeclarator that updated in FieldDecl or VarDecl.");
+                throw new RuntimeException("Updating variable decl only supports field/local variable.");
             }
         }
         else if (beforeNode instanceof Statement){
@@ -706,7 +706,7 @@ public class Instrumenter {
                     }
                 }
                 else{
-                    throw new RuntimeException("RevertUpdate can only handle then/else/condition for IfStmt.");
+                    throw new RuntimeException("Updating if stmt only supports condition/then/else.");
                 }
 
                 ModifiedNode beforeModified=new ModifiedStmt(curBefore,ifBefore,methodGetter,methodSetter);
@@ -743,7 +743,7 @@ public class Instrumenter {
                     }
                 }
                 else{
-                    throw new RuntimeException("RevertUpdate can only handle body/condition for WhileStmt.");
+                    throw new RuntimeException("Updating while stmt only supports condition/body.");
                 }
 
                 ModifiedNode beforeModified=new ModifiedStmt(curBefore,whileBefore,methodGetter,methodSetter);
@@ -816,7 +816,7 @@ public class Instrumenter {
                     }
                 }
                 else{
-                    throw new RuntimeException("RevertUpdate can only handle body/init/update/compare for ForStmt.");
+                    throw new RuntimeException("Updating for stmt only supports initialization/compare/update/body.");
                 }
 
                 ModifiedNode beforeModified=new ModifiedStmt(curBefore,indexBefore,forBefore,methodGetter,methodSetter);
@@ -853,7 +853,7 @@ public class Instrumenter {
                     }
                 }
                 else{
-                    throw new RuntimeException("RevertUpdate can only handle body/condition for WhileStmt.");
+                    throw new RuntimeException("Updating do-while stmt only supports condition/body.");
                 }
 
                 ModifiedNode beforeModified=new ModifiedStmt(curBefore,whileBefore,methodGetter,methodSetter);
@@ -879,7 +879,7 @@ public class Instrumenter {
                     }
                 }
                 else{
-                    throw new RuntimeException("RevertUpdate can only handle body/condition for WhileStmt.");
+                    throw new RuntimeException("Updating for-each stmt only supports body.");
                 }
 
                 ModifiedNode beforeModified=new ModifiedStmt(curBefore,whileBefore,methodGetter,methodSetter);
@@ -913,7 +913,7 @@ public class Instrumenter {
                     }
                 }
                 else{
-                    throw new RuntimeException("RevertUpdate can only handle body for SwitchEntry (case, default).");
+                    throw new RuntimeException("Updating switch entry only supports statements.");
                 }
 
                 ModifiedNode beforeModified=new ModifiedStmt(curBefore,indexBefore,caseBefore,methodGetter,methodSetter);
@@ -921,7 +921,7 @@ public class Instrumenter {
                 return new Pair<ModifiedNode,ModifiedNode>(beforeModified, afterModified);
             }
         }
-        throw new RuntimeException("RevertUpdateVisitor can only handle VariableDeclarator or Statement.");
+        throw new RuntimeException("Updating node only supports statements: "+beforeNode.getClass().getName());
     }
 
     /**
@@ -962,7 +962,7 @@ public class Instrumenter {
         if (removedInfo.node instanceof MethodDeclaration){
             // Removal method declaration
             if (!(removedInfo.parent instanceof TypeDeclaration)){
-                throw new RuntimeException("RevertRemoveVisitor can only handle MethodDecl that removed in Class/Interface Dec.");
+                throw new RuntimeException("Removing method only supports Class/Interface/Enum.");
             }
 
             if (removedInfo.parent instanceof ClassOrInterfaceDeclaration) {
@@ -981,16 +981,16 @@ public class Instrumenter {
             }
             else {
                 // Ignore AnnotationDeclaration: no method decl, ignore RecordDeclaration: only Java 14+ supported
-                throw new RuntimeException("Method removal only supports Class/Interface/Enum.");
+                throw new RuntimeException("Removing method only supports Class/Interface/Enum.");
             }
         }
         else{
             // Removal statement
             if (!(removedInfo.node instanceof Statement)){
-                throw new RuntimeException("Inserted node should be Statement.");
+                throw new RuntimeException("Removed node should be Statement.");
             }
             if (!(removedInfo.parent instanceof BlockStmt)) {
-                throw new RuntimeException("RevertInsertionVisitor can only handle statement that inserted in BlockStmt.");
+                throw new RuntimeException("Removing statement only supports BlockStmt.");
             }
 
             BlockStmt block=(BlockStmt)removedInfo.parent;
@@ -1024,7 +1024,7 @@ public class Instrumenter {
             throw new RuntimeException("Inserted node should be Statement.");
         }
         if (!(insertedInfo.parent instanceof BlockStmt)) {
-            throw new RuntimeException("RevertInsertionVisitor can only handle statement that inserted in BlockStmt.");
+            throw new RuntimeException("Inserting statement only supports BlockStmt.");
         }
 
         BlockStmt block=(BlockStmt)insertedInfo.parent;
@@ -1060,7 +1060,7 @@ public class Instrumenter {
             // Update field or variable declaration
             if (!(beforeUpdated.parent instanceof FieldDeclaration || beforeUpdated.parent instanceof VariableDeclarationExpr) ||
                             !(afterUpdated.parent instanceof TypeDeclaration || afterUpdated.parent instanceof VariableDeclarationExpr)){
-                throw new RuntimeException("Can only handle update field or variable declaration.");
+                throw new RuntimeException("Updating field or variable only supports FieldDeclaration or VariableDeclarationExpr.");
             }
 
             if (beforeUpdated.parent instanceof FieldDeclaration){
@@ -1081,7 +1081,7 @@ public class Instrumenter {
                 varDeclAfter.getVariables().set(indexAfter, (VariableDeclarator) afterUpdated.beforeNode);
             }
             else{
-                throw new RuntimeException("RevertUpdateVisitor can only handle VariableDeclarator that updated in FieldDecl or VarDecl.");
+                throw new RuntimeException("Updating field or variable only supports FieldDeclaration or VariableDeclarationExpr.");
             }
         }
         else if (beforeUpdated.node instanceof Statement){
@@ -1114,7 +1114,7 @@ public class Instrumenter {
                     ifStmt.setCondition((Expression) afterModified.node);
                 }
                 else {
-                    throw new RuntimeException("RevertUpdateVisitor can only handle VariableDeclarator or Statement.");
+                    throw new RuntimeException("Updating if stmt only supports condition/then/else.");
                 }
             }
             else if (beforeUpdated.parent instanceof WhileStmt) {
@@ -1130,7 +1130,7 @@ public class Instrumenter {
                     whileStmt.setCondition((Expression) afterModified.node);
                 }
                 else {
-                    throw new RuntimeException("RevertUpdateVisitor can only handle VariableDeclarator or Statement.");
+                    throw new RuntimeException("Updating while stmt only supports condition/then.");
                 }
             }
             else if (beforeUpdated.parent instanceof ForStmt) {
@@ -1156,7 +1156,7 @@ public class Instrumenter {
                     forStmt.setUpdate(updateList);
                 }
                 else {
-                    throw new RuntimeException("RevertUpdateVisitor can only handle VariableDeclarator or Statement.");
+                    throw new RuntimeException("Updating for stmt only supports init/compare/update/body.");
                 }
             }
             else if (beforeUpdated.parent instanceof DoStmt) {
@@ -1172,7 +1172,7 @@ public class Instrumenter {
                     whileStmt.setCondition((Expression) afterModified.node);
                 }
                 else {
-                    throw new RuntimeException("RevertUpdateVisitor can only handle VariableDeclarator or Statement.");
+                    throw new RuntimeException("Updating do-while stmt only supports condition/then.");
                 }
             }
             else if (beforeUpdated.parent instanceof ForEachStmt) {
@@ -1185,7 +1185,7 @@ public class Instrumenter {
                     body.getStatements().set(1, (Statement) afterModified.node);
                 }
                 else {
-                    throw new RuntimeException("RevertUpdateVisitor can only handle VariableDeclarator or Statement.");
+                    throw new RuntimeException("Updating for-each stmt only supports body.");
                 }
             }
             else if (beforeUpdated.parent instanceof SwitchEntry) {
@@ -1199,11 +1199,11 @@ public class Instrumenter {
                     switchEntry.setStatements(stmtList);
                 }
                 else {
-                    throw new RuntimeException("RevertUpdateVisitor can only handle VariableDeclarator or Statement.");
+                    throw new RuntimeException("Updating switch entry only supports body.");
                 }
             }
             else {
-                throw new RuntimeException("RevertUpdateVisitor can only handle VariableDeclarator or Statement.");
+                throw new RuntimeException("Updating node only supports statements: "+beforeUpdated.parent.getClass().getName());
             }
         }
     }
