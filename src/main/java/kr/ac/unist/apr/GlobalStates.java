@@ -33,6 +33,8 @@ import java.io.IOException;
  * @see PatchedSourceVisitor
  */
 public class GlobalStates {
+  // In this class, we minimalize the dependencies language features.
+  
   /** Full name of this class */
   public static final String STATE_CLASS_NAME="kr.ac.unist.apr.GlobalStates";
   /** wrapper method name of switch-case */
@@ -94,7 +96,6 @@ public class GlobalStates {
 
       if (!isShutdownHookSet) {
         Runtime.getRuntime().addShutdownHook(new Thread(new Runnable() {
-          @Override
           public void run() {
             try {
               String outputFile=System.getenv("GREYBOX_RESULT");
