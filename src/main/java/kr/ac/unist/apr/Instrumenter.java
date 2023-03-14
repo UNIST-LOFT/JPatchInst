@@ -115,7 +115,9 @@ public class Instrumenter {
 
             fReader.close();
             bReader.close();
-            if (source.equals(originalFilePath))
+            File sourcFile=new File(originalFilePath);
+            String sourcePath=sourcFile.getAbsolutePath();
+            if (source.equals(sourcePath))
                 originalRootNode = sourceCtxt;
             else
                 originalNodes.put(source,sourceCtxt);
@@ -142,7 +144,9 @@ public class Instrumenter {
 
             fReader.close();
             bReader.close();
-            if (source.equals(patchedFilePath))
+            File sourcFile=new File(patchedFilePath);
+            String sourcePath=sourcFile.getAbsolutePath();
+            if (source.equals(sourcePath))
                 patchedRootNode = targetCtxt;
             else
                 targetNodes.put(source,targetCtxt);
