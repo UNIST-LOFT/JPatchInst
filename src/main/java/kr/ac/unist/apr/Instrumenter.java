@@ -98,10 +98,10 @@ public class Instrumenter {
                     String targetSourcePath,
                     String originalSourcePath,
                     String[] classPaths) throws IOException {
-        this.originalFilePath=originalFilePath;
-        this.patchedFilePath=patchedFilePath;
-        this.originalSourcePath=originalSourcePath;
-        this.targetSourcePath=targetSourcePath;
+        this.originalFilePath=new File(originalFilePath).getAbsolutePath();
+        this.patchedFilePath=new File(patchedFilePath).getAbsolutePath();
+        this.originalSourcePath=new File(originalSourcePath).getAbsolutePath();
+        this.targetSourcePath=new File(targetSourcePath).getAbsolutePath();
 
         Main.LOGGER.log(Level.INFO, "Generate AST for original source...");
         // generate AST for original source
