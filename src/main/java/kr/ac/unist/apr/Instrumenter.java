@@ -1081,7 +1081,7 @@ public class Instrumenter {
             BlockStmt block=(BlockStmt)removedInfo.parent;
             int index=removedInfo.index;
             
-            if (block.getStatements().get(0).toString().startsWith("kr.ac.unist.apr")){
+            if (block.getStatements().size()>0 && block.getStatements().get(0).toString().startsWith("kr.ac.unist.apr")){
                 if (index==0)
                     block.getStatements().add(1,(Statement)removedInfo.node);
                 else
