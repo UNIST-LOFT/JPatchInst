@@ -118,7 +118,14 @@ public class GlobalStates {
               }
               fw.close();
             } catch (IOException e) {
-              e.printStackTrace();
+              FileWriter fw;
+              try {
+                fw=new FileWriter("/tmp/greybox.err");
+                fw.write(e.getMessage());
+                fw.close();
+              } catch (IOException e1) {
+                
+              }
             }
           }
         }));
