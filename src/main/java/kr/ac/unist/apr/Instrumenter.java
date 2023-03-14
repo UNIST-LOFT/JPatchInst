@@ -220,7 +220,88 @@ public class Instrumenter {
         assert dstAddSet.size()<=1 && srcDelSet.size()<=1 && srcUpdSet.size()<=1 && dstUpdSet.size()<=1 && srcMvSet.size()<=1 && dstMvSet.size()<=1;
 
         Main.LOGGER.log(Level.INFO, "GumTreeJP finished, parsing results...");
-        if (dstAddSet.size()!=0 && srcMvSet.size()!=0){
+        if (dstAddSet.size()!=0 && srcDelSet.size()!=0 && srcMvSet.size()!=0) {
+            if (dstAddSet.get(0) instanceof BlockStmt && srcDelSet.get(0) instanceof BlockStmt){
+                // Convert terrible insertion+delection to another operation
+                BlockStmt srcBlock=(BlockStmt) srcDelSet.get(0);
+                BlockStmt dstBlock=(BlockStmt) dstAddSet.get(0);
+
+                if (srcBlock.getStatements().size()<dstBlock.getStatements().size()){
+                    // Insertion
+                    boolean found=false;
+                    for (int i=0;i<srcBlock.getStatements().size();i++) {
+                        Statement srcStmt=srcBlock.getStatement(i);
+                        Statement dstStmt=dstBlock.getStatement(i);
+                        if (!srcStmt.equals(dstStmt)){
+                            srcDelSet.clear();
+                            dstAddSet.clear();
+                            srcMvSet.clear();
+                            dstMvSet.clear();
+
+                            dstAddSet.add(dstStmt);
+                            found=true;
+                            break;
+                        }
+                    }
+
+                    if (!found) {
+                        // Last statement is inserted
+                        srcDelSet.clear();
+                        dstAddSet.clear();
+                        srcMvSet.clear();
+                        dstMvSet.clear();
+
+                        dstAddSet.add(dstBlock.getStatement(dstBlock.getStatements().size()-1));
+                    }
+                }
+                else if (srcBlock.getStatements().size()>dstBlock.getStatements().size()) {
+                    // Removed
+                    boolean found=false;
+                    for (int i=0;i<dstBlock.getStatements().size();i++) {
+                        Statement srcStmt=srcBlock.getStatement(i);
+                        Statement dstStmt=dstBlock.getStatement(i);
+                        if (!srcStmt.equals(dstStmt)){
+                            srcDelSet.clear();
+                            dstAddSet.clear();
+                            srcMvSet.clear();
+                            dstMvSet.clear();
+
+                            srcDelSet.add(srcBlock);
+                            found=true;
+                            break;
+                        }
+                    }
+
+                    if (!found) {
+                        // Last statement is inserted
+                        srcDelSet.clear();
+                        dstAddSet.clear();
+                        srcMvSet.clear();
+                        dstMvSet.clear();
+
+                        srcDelSet.add(srcBlock.getStatement(srcBlock.getStatements().size()-1));
+                    }
+                }
+                else{
+                    // Updated to another statement
+                    for (int i=0;i<srcBlock.getStatements().size();i++) {
+                        Statement srcStmt=srcBlock.getStatement(i);
+                        Statement dstStmt=dstBlock.getStatement(i);
+                        if (!srcStmt.equals(dstStmt)){
+                            srcDelSet.clear();
+                            dstAddSet.clear();
+                            srcMvSet.clear();
+                            dstMvSet.clear();
+
+                            srcUpdSet.add(srcStmt);
+                            dstUpdSet.add(dstStmt);
+                            break;
+                        }
+                    }
+                }
+            }
+        }
+        else if (dstAddSet.size()!=0 && srcMvSet.size()!=0){
             // Convert insertion+move to update
             for (Node node:new ArrayList<>(dstAddSet)){
                 dstAddSet.clear();
@@ -1030,7 +1111,7 @@ public class Instrumenter {
         BlockStmt block=(BlockStmt)insertedInfo.parent;
         int index=insertedInfo.index;
         
-        if (block.getStatements().get(0).toString().startsWith("kr.ac.unist.apr")){
+        if (block.getStatements().size()>0 && block.getStatements().get(0).toString().startsWith("kr.ac.unist.apr")){
             if (index==0)
                 block.getStatements().add(1,(Statement) insertedInfo.node);
             else
