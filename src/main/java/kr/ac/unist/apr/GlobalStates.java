@@ -76,23 +76,36 @@ public class GlobalStates {
    */
   public static void wrapBranch(long id){
     if (System.getenv("GREYBOX_BRANCH").equals("1")) {
-      long currentKey=id^previousId;
+      try{
+        long currentKey=id^previousId;
 
-      boolean isFound=false;
-      for (int i=0; i<totalBranches; i++) {
-        if (branchIds[i]==currentKey) {
-          branchCounters[i]++;
-          isFound=true;
-          break;
+        boolean isFound=false;
+        for (int i=0; i<totalBranches; i++) {
+          if (branchIds[i]==currentKey) {
+            branchCounters[i]++;
+            isFound=true;
+            break;
+          }
         }
+        if (!isFound) {
+          branchIds[totalBranches]=currentKey;
+          branchCounters[totalBranches]=1;
+          totalBranches++;
+        }
+    
+        previousId=id>>1;
       }
-      if (!isFound) {
-        branchIds[totalBranches]=currentKey;
-        branchCounters[totalBranches]=1;
-        totalBranches++;
+      catch (Exception e) {
+        FileWriter fw;
+        try {
+          fw=new FileWriter("/tmp/greybox.err");
+          fw.write(e.getMessage());
+          fw.close();
+        } catch (IOException e1) {
+          
+        }
+
       }
-  
-      previousId=id>>1;
 
       if (!isShutdownHookSet) {
         Runtime.getRuntime().addShutdownHook(new Thread(new Runnable() {
