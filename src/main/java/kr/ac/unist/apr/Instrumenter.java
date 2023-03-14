@@ -22,6 +22,7 @@ import com.github.gumtreediff.tree.TreeContext;
 import com.github.javaparser.ast.Node;
 import com.github.javaparser.ast.NodeList;
 import com.github.javaparser.ast.body.ClassOrInterfaceDeclaration;
+import com.github.javaparser.ast.body.ConstructorDeclaration;
 import com.github.javaparser.ast.body.EnumDeclaration;
 import com.github.javaparser.ast.body.FieldDeclaration;
 import com.github.javaparser.ast.body.MethodDeclaration;
@@ -481,7 +482,7 @@ public class Instrumenter {
         List<Node> finalResult=new ArrayList<>();
         for (Node node:result){
             Node curNode=node;
-            while (!(curNode instanceof Statement || curNode instanceof MethodDeclaration ||
+            while (!(curNode instanceof Statement || curNode instanceof MethodDeclaration || curNode instanceof ConstructorDeclaration ||
                             curNode instanceof FieldDeclaration || curNode instanceof VariableDeclarationExpr))
                 curNode=curNode.getParentNode().get();
             finalResult.add(curNode);
@@ -558,7 +559,7 @@ public class Instrumenter {
      * @see Instrumenter#rollbackRemoval
      */
     protected ModifiedNode revertRemoval(Node removedNode) {
-        if (removedNode instanceof MethodDeclaration){
+        if (removedNode instanceof MethodDeclaration || removedNode instanceof ConstructorDeclaration){
             // Removal method declaration
             if (!(removedNode.getParentNode().get() instanceof TypeDeclaration)){
                 throw new RuntimeException("Removing method decl only supports for Class/Interface/Enum.");
@@ -1064,6 +1065,31 @@ public class Instrumenter {
                     typeDecl.getMembers().addFirst((MethodDeclaration) removedInfo.node);
                 else
                     typeDecl.getMembers().addAfter((MethodDeclaration) removedInfo.node, (MethodDeclaration) removedInfo.beforeNode);
+            }
+            else {
+                // Ignore AnnotationDeclaration: no method decl, ignore RecordDeclaration: only Java 14+ supported
+                throw new RuntimeException("Removing method only supports Class/Interface/Enum.");
+            }
+        }
+        else if (removedInfo.node instanceof ConstructorDeclaration){
+            // Removal method declaration
+            if (!(removedInfo.parent instanceof TypeDeclaration)){
+                throw new RuntimeException("Removing method only supports Class/Interface/Enum.");
+            }
+
+            if (removedInfo.parent instanceof ClassOrInterfaceDeclaration) {
+                ClassOrInterfaceDeclaration typeDecl=(ClassOrInterfaceDeclaration)removedInfo.parent;
+                if (removedInfo.index==0)
+                    typeDecl.getMembers().addFirst((ConstructorDeclaration) removedInfo.node);
+                else
+                    typeDecl.getMembers().addAfter((ConstructorDeclaration) removedInfo.node, (ConstructorDeclaration) removedInfo.beforeNode);
+            }
+            else if (removedInfo.parent instanceof EnumDeclaration) {
+                EnumDeclaration typeDecl=(EnumDeclaration)removedInfo.parent;
+                if (removedInfo.index==0)
+                    typeDecl.getMembers().addFirst((ConstructorDeclaration) removedInfo.node);
+                else
+                    typeDecl.getMembers().addAfter((ConstructorDeclaration) removedInfo.node, (ConstructorDeclaration) removedInfo.beforeNode);
             }
             else {
                 // Ignore AnnotationDeclaration: no method decl, ignore RecordDeclaration: only Java 14+ supported
