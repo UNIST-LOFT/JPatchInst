@@ -481,7 +481,8 @@ public class Instrumenter {
         List<Node> finalResult=new ArrayList<>();
         for (Node node:result){
             Node curNode=node;
-            while (!(curNode instanceof Statement))
+            while (!(curNode instanceof Statement || curNode instanceof MethodDeclaration ||
+                            curNode instanceof FieldDeclaration || curNode instanceof VariableDeclarationExpr))
                 curNode=curNode.getParentNode().get();
             finalResult.add(curNode);
         }
