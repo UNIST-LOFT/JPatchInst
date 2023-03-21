@@ -46,25 +46,13 @@ public class GlobalStates {
    * The executed branch ID in previous. Used for calculate current ID.
    */
   private static long previousId=0;
-
-  // NOTE: We use array instead of Map<> because some benchmarks do not supports them (e.g. Chart)
-  /**
-   * The IDs of the branches.
-   */
-  private static long[] branchIds=new long[1000000];
-  /**
-   * The counter of the branches.
-   */
-  private static long[] branchCounters=new long[1000000];
-  /**
-   * The total number of the branches.
-   */
-  private static int totalBranches=0;
   
   /**
    * We do not want to add shutdown hook more than once.
    */
   private static boolean isShutdownHookSet=false;
+
+  private static FileWriter resultFile=null;
 
   /**
    * Wrapper for each branch.
@@ -77,21 +65,14 @@ public class GlobalStates {
   public static void wrapBranch(long id){
     if (System.getenv("GREYBOX_BRANCH").equals("1")) {
       try{
+        if (!isShutdownHookSet) {
+          resultFile=new FileWriter(System.getenv("GREYBOX_RESULT"));
+        }
+        
         long currentKey=id^previousId;
 
-        boolean isFound=false;
-        for (int i=0; i<totalBranches; i++) {
-          if (branchIds[i]==currentKey) {
-            branchCounters[i]++;
-            isFound=true;
-            break;
-          }
-        }
-        if (!isFound) {
-          branchIds[totalBranches]=currentKey;
-          branchCounters[totalBranches]=1;
-          totalBranches++;
-        }
+        resultFile.write(Long.toString(currentKey)+"\n");
+        resultFile.flush();
     
         previousId=id>>1;
       }
@@ -111,12 +92,7 @@ public class GlobalStates {
         Runtime.getRuntime().addShutdownHook(new Thread(new Runnable() {
           public void run() {
             try {
-              String outputFile=System.getenv("GREYBOX_RESULT");
-              FileWriter fw=new FileWriter(outputFile,true);
-              for (int i=0;i<totalBranches;i++) {
-                fw.write(Long.toString(branchIds[i])+","+Long.toString(branchCounters[i])+"\n");
-              }
-              fw.close();
+              resultFile.close();
             } catch (IOException e) {
               FileWriter fw;
               try {
