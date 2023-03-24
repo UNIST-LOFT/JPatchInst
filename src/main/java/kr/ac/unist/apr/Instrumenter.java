@@ -28,6 +28,7 @@ import com.github.javaparser.ast.body.FieldDeclaration;
 import com.github.javaparser.ast.body.MethodDeclaration;
 import com.github.javaparser.ast.body.TypeDeclaration;
 import com.github.javaparser.ast.body.VariableDeclarator;
+import com.github.javaparser.ast.comments.LineComment;
 import com.github.javaparser.ast.expr.Expression;
 import com.github.javaparser.ast.expr.LongLiteralExpr;
 import com.github.javaparser.ast.expr.MethodCallExpr;
@@ -485,7 +486,8 @@ public class Instrumenter {
             // while (!(curNode instanceof Statement || curNode instanceof MethodDeclaration || curNode instanceof ConstructorDeclaration ||
             //                 curNode instanceof FieldDeclaration || curNode instanceof VariableDeclarationExpr))
             //     curNode=curNode.getParentNode().get();
-            finalResult.add(curNode);
+            if (!(curNode instanceof LineComment))
+                finalResult.add(curNode);
         }
 
         return finalResult;
@@ -508,31 +510,39 @@ public class Instrumenter {
      * @see Instrumenter#rollbackMove
      */
     protected Pair<ModifiedNode,ModifiedNode> revertMove(Node movedFromOriginal,Node movedToPatch) {
-        if (movedFromOriginal.getParentNode().get() instanceof BlockStmt &&
+        Node curNodeFromOrig=movedFromOriginal;
+        Node curNodeToPatch=movedToPatch;
+        while (!(curNodeFromOrig.getParentNode().get() instanceof BlockStmt)) {
+            curNodeFromOrig=curNodeFromOrig.getParentNode().get();
+        }
+        while (!(curNodeToPatch.getParentNode().get() instanceof BlockStmt)) {
+            curNodeToPatch=curNodeToPatch.getParentNode().get();
+        }
+        if (curNodeFromOrig.getParentNode().get() instanceof BlockStmt &&
                         movedToPatch.getParentNode().get() instanceof BlockStmt){
             // A node is moved from a block to another block.
-            BlockStmt blockFrom=(BlockStmt)movedFromOriginal.getParentNode().get();
-            BlockStmt blockTo=(BlockStmt)movedToPatch.getParentNode().get();
+            BlockStmt blockFrom=(BlockStmt)curNodeFromOrig.getParentNode().get();
+            BlockStmt blockTo=(BlockStmt)curNodeToPatch.getParentNode().get();
 
-            int indexFrom=blockFrom.getStatements().indexOf(movedFromOriginal);
-            int indexTo=blockTo.getStatements().indexOf(movedToPatch);
+            int indexFrom=blockFrom.getStatements().indexOf(curNodeFromOrig);
+            int indexTo=blockTo.getStatements().indexOf(curNodeToPatch);
 
-            blockTo.getStatements().remove(movedToPatch);
-            blockTo.getStatements().add(indexFrom, (Statement) movedToPatch);
+            blockTo.getStatements().remove(curNodeToPatch);
+            blockTo.getStatements().add(indexFrom, (Statement) curNodeToPatch);
 
             ModifiedNode beforeNode,afterNode;
             if (indexFrom==0){
-                beforeNode=new ModifiedNode(movedFromOriginal,indexFrom,blockFrom,null);
+                beforeNode=new ModifiedNode(curNodeFromOrig,indexFrom,blockFrom,null);
             }
             else{
-                beforeNode=new ModifiedNode(movedFromOriginal,indexFrom,blockFrom,blockFrom.getStatements().get(indexFrom-1));
+                beforeNode=new ModifiedNode(curNodeFromOrig,indexFrom,blockFrom,blockFrom.getStatements().get(indexFrom-1));
             }
 
             if (indexTo==0){
-                afterNode=new ModifiedNode(movedToPatch,indexTo,blockTo,null);
+                afterNode=new ModifiedNode(curNodeToPatch,indexTo,blockTo,null);
             }
             else{
-                afterNode=new ModifiedNode(movedToPatch,indexTo,blockTo,blockTo.getStatements().get(indexTo-1));
+                afterNode=new ModifiedNode(curNodeToPatch,indexTo,blockTo,blockTo.getStatements().get(indexTo-1));
             }
 
             return new Pair<Instrumenter.ModifiedNode,Instrumenter.ModifiedNode>(beforeNode, afterNode);
@@ -559,33 +569,38 @@ public class Instrumenter {
      * @see Instrumenter#rollbackRemoval
      */
     protected ModifiedNode revertRemoval(Node removedNode) {
-        if (removedNode instanceof MethodDeclaration || removedNode instanceof ConstructorDeclaration){
+        Node curNode=removedNode;
+        while (!(curNode instanceof MethodDeclaration || curNode instanceof ConstructorDeclaration ||
+                        curNode instanceof FieldDeclaration || curNode instanceof VariableDeclarationExpr || curNode.getParentNode().get() instanceof BlockStmt))
+            curNode=curNode.getParentNode().get();
+
+        if (curNode instanceof MethodDeclaration || curNode instanceof ConstructorDeclaration){
             // Removal method declaration
             if (!(removedNode.getParentNode().get() instanceof TypeDeclaration)){
                 throw new RuntimeException("Removing method decl only supports for Class/Interface/Enum.");
             }
 
             ModifiedNode modifiedNode=null;
-            if (removedNode.getParentNode().get() instanceof ClassOrInterfaceDeclaration){
-                ClassOrInterfaceDeclaration typeDecl=(ClassOrInterfaceDeclaration)removedNode.getParentNode().get();
-                int index=typeDecl.getMembers().indexOf(removedNode);
-                typeDecl.getMembers().remove(removedNode);
+            if (curNode.getParentNode().get() instanceof ClassOrInterfaceDeclaration){
+                ClassOrInterfaceDeclaration typeDecl=(ClassOrInterfaceDeclaration)curNode.getParentNode().get();
+                int index=typeDecl.getMembers().indexOf(curNode);
+                typeDecl.getMembers().remove(curNode);
                 if (index==0){
-                    modifiedNode=new ModifiedNode(removedNode,index,typeDecl,null);
+                    modifiedNode=new ModifiedNode(curNode,index,typeDecl,null);
                 }
                 else{
-                    modifiedNode=new ModifiedNode(removedNode,index,typeDecl,typeDecl.getMembers().get(index-1));
+                    modifiedNode=new ModifiedNode(curNode,index,typeDecl,typeDecl.getMembers().get(index-1));
                 }
             }
-            else if (removedNode.getParentNode().get() instanceof EnumDeclaration) {
-                EnumDeclaration typeDecl=(EnumDeclaration)removedNode.getParentNode().get();
-                int index=typeDecl.getMembers().indexOf(removedNode);
-                typeDecl.getMembers().remove(removedNode);
+            else if (curNode.getParentNode().get() instanceof EnumDeclaration) {
+                EnumDeclaration typeDecl=(EnumDeclaration)curNode.getParentNode().get();
+                int index=typeDecl.getMembers().indexOf(curNode);
+                typeDecl.getMembers().remove(curNode);
                 if (index==0){
-                    modifiedNode=new ModifiedNode(removedNode,index,typeDecl,null);
+                    modifiedNode=new ModifiedNode(curNode,index,typeDecl,null);
                 }
                 else{
-                    modifiedNode=new ModifiedNode(removedNode,index,typeDecl,typeDecl.getMembers().get(index-1));
+                    modifiedNode=new ModifiedNode(curNode,index,typeDecl,typeDecl.getMembers().get(index-1));
                 }
             }
             else {
@@ -597,22 +612,22 @@ public class Instrumenter {
         }
         else{
             // Removal statement
-            if (!(removedNode instanceof Statement)){
+            if (!(curNode instanceof Statement)){
                 throw new RuntimeException("Removed node should be Statement.");
             }
-            if (!(removedNode.getParentNode().get() instanceof BlockStmt)) {
+            if (!(curNode.getParentNode().get() instanceof BlockStmt)) {
                 throw new RuntimeException("Removing statement only supports in the BlockStmt.");
             }
 
-            BlockStmt block=(BlockStmt)removedNode.getParentNode().get();
-            int index=block.getStatements().indexOf(removedNode);
-            block.getStatements().remove(removedNode);
+            BlockStmt block=(BlockStmt)curNode.getParentNode().get();
+            int index=block.getStatements().indexOf(curNode);
+            block.getStatements().remove(curNode);
             ModifiedNode modifiedNode;
             if (index==0){
-                modifiedNode=new ModifiedNode(removedNode,index,block,null);
+                modifiedNode=new ModifiedNode(curNode,index,block,null);
             }
             else{
-                modifiedNode=new ModifiedNode(removedNode,index,block,block.getStatements().get(index-1));
+                modifiedNode=new ModifiedNode(curNode,index,block,block.getStatements().get(index-1));
             }
             return modifiedNode;
         }
@@ -635,22 +650,20 @@ public class Instrumenter {
      * @see Instrumenter#rollbackInsertion
      */
     protected ModifiedNode revertInsertion(Node insertedNode) {
-        if (!(insertedNode instanceof Statement)){
-            throw new RuntimeException("Inserted node should be Statement.");
-        }
-        if (!(insertedNode.getParentNode().get() instanceof BlockStmt)) {
-            throw new RuntimeException("Inserting statement only supports in the BlockStmt.");
+        Node curNode=insertedNode;
+        while (!(curNode.getParentNode().get() instanceof BlockStmt)){
+            curNode=curNode.getParentNode().get();
         }
 
-        BlockStmt block=(BlockStmt)insertedNode.getParentNode().get();
-        int index=block.getStatements().indexOf(insertedNode);
-        block.getStatements().remove(insertedNode);
+        BlockStmt block=(BlockStmt)curNode.getParentNode().get();
+        int index=block.getStatements().indexOf(curNode);
+        block.getStatements().remove(curNode);
         ModifiedNode modifiedNode;
         if (index==0){
-            modifiedNode=new ModifiedNode(insertedNode,index,block,null);
+            modifiedNode=new ModifiedNode(curNode,index,block,null);
         }
         else{
-            modifiedNode=new ModifiedNode(insertedNode,index,block,block.getStatements().get(index-1));
+            modifiedNode=new ModifiedNode(curNode,index,block,block.getStatements().get(index-1));
         }
         return modifiedNode;
     }
