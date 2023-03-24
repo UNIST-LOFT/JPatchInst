@@ -482,9 +482,9 @@ public class Instrumenter {
         List<Node> finalResult=new ArrayList<>();
         for (Node node:result){
             Node curNode=node;
-            while (!(curNode instanceof Statement || curNode instanceof MethodDeclaration || curNode instanceof ConstructorDeclaration ||
-                            curNode instanceof FieldDeclaration || curNode instanceof VariableDeclarationExpr))
-                curNode=curNode.getParentNode().get();
+            // while (!(curNode instanceof Statement || curNode instanceof MethodDeclaration || curNode instanceof ConstructorDeclaration ||
+            //                 curNode instanceof FieldDeclaration || curNode instanceof VariableDeclarationExpr))
+            //     curNode=curNode.getParentNode().get();
             finalResult.add(curNode);
         }
 
@@ -724,7 +724,7 @@ public class Instrumenter {
                 throw new RuntimeException("Updating variable decl only supports field/local variable.");
             }
         }
-        else if (beforeNode instanceof Statement){
+        else if (beforeNode instanceof Statement || beforeNode instanceof Expression){
             // Update normal statement
             Node curBefore=beforeNode;
             Node curAfter=afteNode;
@@ -1196,7 +1196,7 @@ public class Instrumenter {
                 throw new RuntimeException("Updating field or variable only supports FieldDeclaration or VariableDeclarationExpr.");
             }
         }
-        else if (beforeUpdated.node instanceof Statement){
+        else if (beforeUpdated.node instanceof Statement || beforeUpdated.node instanceof Expression){
             if (beforeUpdated.parent instanceof BlockStmt){
                 // Update normal statement
                 BlockStmt blockBefore=(BlockStmt)beforeUpdated.parent;
