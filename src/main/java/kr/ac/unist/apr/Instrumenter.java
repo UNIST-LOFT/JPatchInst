@@ -21,6 +21,7 @@ import com.github.gumtreediff.tree.ITree;
 import com.github.gumtreediff.tree.TreeContext;
 import com.github.javaparser.ast.Node;
 import com.github.javaparser.ast.NodeList;
+import com.github.javaparser.ast.body.BodyDeclaration;
 import com.github.javaparser.ast.body.ClassOrInterfaceDeclaration;
 import com.github.javaparser.ast.body.ConstructorDeclaration;
 import com.github.javaparser.ast.body.EnumDeclaration;
@@ -1070,14 +1071,14 @@ public class Instrumenter {
                 if (removedInfo.index==0)
                     typeDecl.getMembers().addFirst((MethodDeclaration) removedInfo.node);
                 else
-                    typeDecl.getMembers().addAfter((MethodDeclaration) removedInfo.node, (MethodDeclaration) removedInfo.beforeNode);
+                    typeDecl.getMembers().addAfter((MethodDeclaration) removedInfo.node, (BodyDeclaration<?>) removedInfo.beforeNode);
             }
             else if (removedInfo.parent instanceof EnumDeclaration) {
                 EnumDeclaration typeDecl=(EnumDeclaration)removedInfo.parent;
                 if (removedInfo.index==0)
                     typeDecl.getMembers().addFirst((MethodDeclaration) removedInfo.node);
                 else
-                    typeDecl.getMembers().addAfter((MethodDeclaration) removedInfo.node, (MethodDeclaration) removedInfo.beforeNode);
+                    typeDecl.getMembers().addAfter((MethodDeclaration) removedInfo.node, (BodyDeclaration<?>) removedInfo.beforeNode);
             }
             else {
                 // Ignore AnnotationDeclaration: no method decl, ignore RecordDeclaration: only Java 14+ supported
@@ -1095,14 +1096,14 @@ public class Instrumenter {
                 if (removedInfo.index==0)
                     typeDecl.getMembers().addFirst((ConstructorDeclaration) removedInfo.node);
                 else
-                    typeDecl.getMembers().addAfter((ConstructorDeclaration) removedInfo.node, (ConstructorDeclaration) removedInfo.beforeNode);
+                    typeDecl.getMembers().addAfter((ConstructorDeclaration) removedInfo.node, (BodyDeclaration<?>) removedInfo.beforeNode);
             }
             else if (removedInfo.parent instanceof EnumDeclaration) {
                 EnumDeclaration typeDecl=(EnumDeclaration)removedInfo.parent;
                 if (removedInfo.index==0)
                     typeDecl.getMembers().addFirst((ConstructorDeclaration) removedInfo.node);
                 else
-                    typeDecl.getMembers().addAfter((ConstructorDeclaration) removedInfo.node, (ConstructorDeclaration) removedInfo.beforeNode);
+                    typeDecl.getMembers().addAfter((ConstructorDeclaration) removedInfo.node, (BodyDeclaration<?>) removedInfo.beforeNode);
             }
             else {
                 // Ignore AnnotationDeclaration: no method decl, ignore RecordDeclaration: only Java 14+ supported
