@@ -101,8 +101,14 @@ public class Instrumenter {
                     String targetSourcePath,
                     String originalSourcePath,
                     String[] classPaths) throws IOException {
-        this.originalFilePath=new File(originalFilePath).getAbsolutePath();
-        this.patchedFilePath=new File(patchedFilePath).getAbsolutePath();
+        if (originalFilePath!=null && patchedFilePath!=null) {
+            this.originalFilePath=new File(originalFilePath).getAbsolutePath();
+            this.patchedFilePath=new File(patchedFilePath).getAbsolutePath();
+        }
+        else {
+            this.originalFilePath=null;
+            this.patchedFilePath=null;
+        }
         this.originalSourcePath=new File(originalSourcePath).getAbsolutePath();
         this.targetSourcePath=new File(targetSourcePath).getAbsolutePath();
 
@@ -118,10 +124,14 @@ public class Instrumenter {
 
             fReader.close();
             bReader.close();
-            File sourcFile=new File(originalFilePath);
-            String sourcePath=sourcFile.getAbsolutePath();
-            if (source.equals(sourcePath))
-                originalRootNode = sourceCtxt;
+            if (originalFilePath!=null){
+                File sourcFile=new File(originalFilePath);
+                String sourcePath=sourcFile.getAbsolutePath();
+                if (source.equals(sourcePath))
+                    originalRootNode = sourceCtxt;
+                else
+                    originalNodes.put(source,sourceCtxt);
+            }
             else
                 originalNodes.put(source,sourceCtxt);
         }
@@ -147,10 +157,14 @@ public class Instrumenter {
 
             fReader.close();
             bReader.close();
-            File sourcFile=new File(patchedFilePath);
-            String sourcePath=sourcFile.getAbsolutePath();
-            if (source.equals(sourcePath))
-                patchedRootNode = targetCtxt;
+            if (patchedFilePath!=null){
+                File sourcFile=new File(patchedFilePath);
+                String sourcePath=sourcFile.getAbsolutePath();
+                if (source.equals(sourcePath))
+                    patchedRootNode = targetCtxt;
+                else
+                    targetNodes.put(source,targetCtxt);
+            }
             else
                 targetNodes.put(source,targetCtxt);
         }
@@ -172,9 +186,12 @@ public class Instrumenter {
         // Visit original source visitor and get IDs
         // TODO: Cache/load this result with file
         Main.LOGGER.log(Level.INFO, "Gen IDs from original ASTs...");
-        OriginalSourceVisitor originalSourceVisitor=new OriginalSourceVisitor();
-        originalSourceVisitor.visitPreOrder(originalRootNode.getRoot().getJParserNode());
-        nodeToId.put(originalFilePath, originalSourceVisitor.getNodeToId());
+        OriginalSourceVisitor originalSourceVisitor;
+        if (originalFilePath!=null){
+            originalSourceVisitor=new OriginalSourceVisitor();
+            originalSourceVisitor.visitPreOrder(originalRootNode.getRoot().getJParserNode());
+            nodeToId.put(originalFilePath, originalSourceVisitor.getNodeToId());
+        }
 
         for (Map.Entry<String,TreeContext> originalCtxt:originalNodes.entrySet()){
             originalSourceVisitor=new OriginalSourceVisitor();
@@ -205,6 +222,9 @@ public class Instrumenter {
             writer.write(targetNode.toString());
             writer.close();
         }
+
+        // Finish instrumentation if there is no patched file
+        if (patchedFilePath==null) return;
 
         // Get differences between original source and patched source
         Main.LOGGER.log(Level.INFO, "Run GumTreeJP...");
