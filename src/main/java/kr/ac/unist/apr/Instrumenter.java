@@ -127,10 +127,9 @@ public class Instrumenter {
             if (originalFilePath!=null){
                 File sourcFile=new File(originalFilePath);
                 String sourcePath=sourcFile.getAbsolutePath();
+                originalNodes.put(source,sourceCtxt);
                 if (source.equals(sourcePath))
                     originalRootNode = sourceCtxt;
-                else
-                    originalNodes.put(source,sourceCtxt);
             }
             else
                 originalNodes.put(source,sourceCtxt);
@@ -187,12 +186,6 @@ public class Instrumenter {
         // TODO: Cache/load this result with file
         Main.LOGGER.log(Level.INFO, "Gen IDs from original ASTs...");
         OriginalSourceVisitor originalSourceVisitor;
-        if (originalFilePath!=null){
-            originalSourceVisitor=new OriginalSourceVisitor();
-            originalSourceVisitor.visitPreOrder(originalRootNode.getRoot().getJParserNode());
-            nodeToId.put(originalFilePath, originalSourceVisitor.getNodeToId());
-        }
-
         for (Map.Entry<String,TreeContext> originalCtxt:originalNodes.entrySet()){
             originalSourceVisitor=new OriginalSourceVisitor();
             originalSourceVisitor.visitPreOrder(originalCtxt.getValue().getRoot().getJParserNode());
