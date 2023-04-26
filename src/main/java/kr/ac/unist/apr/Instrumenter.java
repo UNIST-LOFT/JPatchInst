@@ -14,6 +14,7 @@ import java.util.Map;
 import java.util.Set;
 import java.util.logging.Level;
 
+import com.github.gumtreediff.gen.SyntaxException;
 import com.github.gumtreediff.gen.javaparser.JavaParserGenerator;
 import com.github.gumtreediff.matchers.Matcher;
 import com.github.gumtreediff.matchers.Matchers;
@@ -120,7 +121,13 @@ public class Instrumenter {
             JavaParserGenerator parser = new JavaParserGenerator();
             FileReader fReader = new FileReader(source);
             BufferedReader bReader = new BufferedReader(fReader);
-            TreeContext sourceCtxt = parser.generate(bReader);
+            TreeContext sourceCtxt;
+            try{
+                sourceCtxt= parser.generate(bReader);
+            } catch (SyntaxException e) {
+                Main.LOGGER.log(Level.SEVERE, "Syntax error in original source: "+source);
+                continue;
+            }
 
             fReader.close();
             bReader.close();
@@ -152,7 +159,13 @@ public class Instrumenter {
             bReader.close();
             bReader=new BufferedReader(new FileReader(source));
             
-            TreeContext targetCtxt = parser.generate(bReader);
+            TreeContext targetCtxt;
+            try{
+                targetCtxt= parser.generate(bReader);
+            } catch (SyntaxException e) {
+                Main.LOGGER.log(Level.SEVERE, "Syntax error in target source: "+source);
+                continue;
+            }
 
             fReader.close();
             bReader.close();
@@ -195,25 +208,27 @@ public class Instrumenter {
         // Instrument target program without patched file
         Main.LOGGER.log(Level.INFO, "Instrument target program except patched file...");
         for (Map.Entry<String,TreeContext> targetCtxt:targetNodes.entrySet()){
-            TargetSourceVisitor instrumenterVisitor=new TargetSourceVisitor(nodeToId.get(targetCtxt.getKey().
-                        replace(targetSourcePath, originalSourcePath)));
-            Node targetNode=targetCtxt.getValue().getRoot().getJParserNode();
-            instrumenterVisitor.visitPreOrder(targetNode);
-            Pair<List<Node>,List<List<Long>>> finalIds=instrumenterVisitor.getResult();
-            for (int i=0;i<finalIds.a.size();i++){
-                Node node=finalIds.a.get(i);
-                List<Long> ids=finalIds.b.get(i);
-                if (node instanceof SwitchEntry)
-                    instrumentSwitchCase((SwitchEntry) node, ids);
-                else
-                    instrumentCondition((Statement) node, ids);
+            if (nodeToId.containsKey(targetCtxt.getKey())){
+                TargetSourceVisitor instrumenterVisitor=new TargetSourceVisitor(nodeToId.get(targetCtxt.getKey().
+                            replace(targetSourcePath, originalSourcePath)));
+                Node targetNode=targetCtxt.getValue().getRoot().getJParserNode();
+                instrumenterVisitor.visitPreOrder(targetNode);
+                Pair<List<Node>,List<List<Long>>> finalIds=instrumenterVisitor.getResult();
+                for (int i=0;i<finalIds.a.size();i++){
+                    Node node=finalIds.a.get(i);
+                    List<Long> ids=finalIds.b.get(i);
+                    if (node instanceof SwitchEntry)
+                        instrumentSwitchCase((SwitchEntry) node, ids);
+                    else
+                        instrumentCondition((Statement) node, ids);
+                }
+                
+                // Save instrumented file
+                FileWriter writer = new FileWriter(targetCtxt.getKey());
+                writer.write("// __INSTRUMENTED__\n");
+                writer.write(targetNode.toString());
+                writer.close();
             }
-            
-            // Save instrumented file
-            FileWriter writer = new FileWriter(targetCtxt.getKey());
-            writer.write("// __INSTRUMENTED__\n");
-            writer.write(targetNode.toString());
-            writer.close();
         }
 
         // Finish instrumentation if there is no patched file
