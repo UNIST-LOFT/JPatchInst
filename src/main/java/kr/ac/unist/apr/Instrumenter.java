@@ -134,12 +134,12 @@ public class Instrumenter {
             if (originalFilePath!=null){
                 File sourcFile=new File(originalFilePath);
                 String sourcePath=sourcFile.getAbsolutePath();
-                originalNodes.put(source,sourceCtxt);
+                originalNodes.put(Path.removeSrcPath(source, originalSourcePath),sourceCtxt);
                 if (source.equals(sourcePath))
                     originalRootNode = sourceCtxt;
             }
             else
-                originalNodes.put(source,sourceCtxt);
+                originalNodes.put(Path.removeSrcPath(source, originalSourcePath),sourceCtxt);
         }
 
         Main.LOGGER.log(Level.INFO, "Generate AST for target source...");
@@ -175,10 +175,10 @@ public class Instrumenter {
                 if (source.equals(sourcePath))
                     patchedRootNode = targetCtxt;
                 else
-                    targetNodes.put(source,targetCtxt);
+                    targetNodes.put(Path.removeSrcPath(source, targetSourcePath),targetCtxt);
             }
             else
-                targetNodes.put(source,targetCtxt);
+                targetNodes.put(Path.removeSrcPath(source, targetSourcePath),targetCtxt);
         }
     }
     
@@ -224,7 +224,7 @@ public class Instrumenter {
                 }
                 
                 // Save instrumented file
-                FileWriter writer = new FileWriter(targetCtxt.getKey());
+                FileWriter writer = new FileWriter(targetSourcePath+"/"+targetCtxt.getKey());
                 writer.write("// __INSTRUMENTED__\n");
                 writer.write(targetNode.toString());
                 writer.close();
@@ -388,7 +388,7 @@ public class Instrumenter {
 
         // Instrument patched source
         Main.LOGGER.log(Level.INFO, "Instrument patched file...");
-        PatchedSourceVisitor patchedSourceVisitor=new PatchedSourceVisitor(nodeToId.get(originalFilePath));
+        PatchedSourceVisitor patchedSourceVisitor=new PatchedSourceVisitor(nodeToId.get(Path.removeSrcPath(originalFilePath, originalSourcePath)));
         patchedSourceVisitor.visitPreOrder(patchedRootNode.getRoot().getJParserNode());
         
         Pair<List<Node>,List<List<Long>>> finalIds=patchedSourceVisitor.getResult();

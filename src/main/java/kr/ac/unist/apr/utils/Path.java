@@ -33,4 +33,10 @@ public class Path {
         }
         return sources;
     }
+
+    public static String removeSrcPath(String absPath, String srcPath) {
+        String relPath=absPath.substring(srcPath.length());
+        if (relPath.startsWith("/")) return relPath.substring(1);
+        else return relPath;
+    }
 }
