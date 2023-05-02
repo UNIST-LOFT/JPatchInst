@@ -35,7 +35,9 @@ public class Path {
     }
 
     public static String removeSrcPath(String absPath, String srcPath) {
-        String relPath=absPath.substring(srcPath.length()-1);
+        int length=srcPath.length();
+        if (srcPath.endsWith("/")) length--;
+        String relPath=absPath.substring(length);
         if (relPath.startsWith("/")) return relPath.substring(1);
         else return relPath;
     }
