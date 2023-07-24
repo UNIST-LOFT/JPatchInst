@@ -41,18 +41,59 @@ public class GlobalStates {
   public static final String STATE_BRANCH_METHOD="wrapBranch";
   /** method name to save the info */
   public static final String STATE_SAVE_INFO="saveBranchInfo";
+  public static final String STATE_INIT="initialize";
+  
+  public static final String STATE_IS_INITIALIZED="isInitialized";
+  public static final String STATE_PREV_ID="previousId";
+  public static final String STATE_RESULT_FILE="resultFile";
+
+  public static final String STATE_ENV_RECORD="GREYBOX_BRANCH";
+  public static final String STATE_ENV_RESULT_FILE="GREYBOX_RESULT";
   
   /**
    * The executed branch ID in previous. Used for calculate current ID.
    */
-  private static long previousId=0;
+  public static long previousId=0;
   
   /**
    * We do not want to add shutdown hook more than once.
    */
   private static boolean isShutdownHookSet=false;
+  public static boolean isInitialized=false;
 
-  private static FileWriter resultFile=null;
+  public static FileWriter resultFile=null;
+
+  public static void initialize() {
+    if (System.getenv("GREYBOX_BRANCH").equals("1")) {
+      if (resultFile==null) {
+        try {
+          resultFile=new FileWriter(System.getenv("GREYBOX_RESULT"));
+        } catch (IOException e) {
+          System.err.println("Cannot open result file: "+System.getenv("GREYBOX_RESULT"));
+          e.printStackTrace();
+        }
+      }
+
+      Runtime.getRuntime().addShutdownHook(new Thread(new Runnable() {
+        public void run() {
+          try {
+            resultFile.close();
+          } catch (IOException e) {
+            FileWriter fw;
+            try {
+              fw=new FileWriter("/tmp/greybox.err");
+              fw.write(e.getMessage());
+              fw.close();
+            } catch (IOException e1) {
+              System.err.println("Cannot open error file: /tmp/greybox.err");
+              e1.printStackTrace();
+            }
+          }
+        }
+      }));
+    }
+    isInitialized=true;
+  }
 
   /**
    * Wrapper for each branch.
@@ -61,6 +102,7 @@ public class GlobalStates {
    * 
    *  This method counts the executed number of each branch.
    * </p>
+   * @deprecated Use {@link #previousId} and {@link #resultFile} directly to reduce method call.
    */
   public static void wrapBranch(long id){
     if (System.getenv("GREYBOX_BRANCH").equals("1")) {

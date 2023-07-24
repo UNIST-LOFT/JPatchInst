@@ -20,6 +20,7 @@ import com.github.gumtreediff.matchers.Matcher;
 import com.github.gumtreediff.matchers.Matchers;
 import com.github.gumtreediff.tree.ITree;
 import com.github.gumtreediff.tree.TreeContext;
+import com.github.javaparser.JavaParser;
 import com.github.javaparser.ast.Node;
 import com.github.javaparser.ast.NodeList;
 import com.github.javaparser.ast.body.BodyDeclaration;
@@ -28,15 +29,22 @@ import com.github.javaparser.ast.body.ConstructorDeclaration;
 import com.github.javaparser.ast.body.EnumDeclaration;
 import com.github.javaparser.ast.body.FieldDeclaration;
 import com.github.javaparser.ast.body.MethodDeclaration;
+import com.github.javaparser.ast.body.Parameter;
 import com.github.javaparser.ast.body.TypeDeclaration;
 import com.github.javaparser.ast.body.VariableDeclarator;
 import com.github.javaparser.ast.comments.LineComment;
+import com.github.javaparser.ast.expr.AssignExpr;
+import com.github.javaparser.ast.expr.BinaryExpr;
 import com.github.javaparser.ast.expr.Expression;
 import com.github.javaparser.ast.expr.LongLiteralExpr;
 import com.github.javaparser.ast.expr.MethodCallExpr;
 import com.github.javaparser.ast.expr.NameExpr;
+import com.github.javaparser.ast.expr.StringLiteralExpr;
+import com.github.javaparser.ast.expr.UnaryExpr;
 import com.github.javaparser.ast.expr.VariableDeclarationExpr;
+import com.github.javaparser.ast.expr.BinaryExpr.Operator;
 import com.github.javaparser.ast.stmt.BlockStmt;
+import com.github.javaparser.ast.stmt.CatchClause;
 import com.github.javaparser.ast.stmt.DoStmt;
 import com.github.javaparser.ast.stmt.ExpressionStmt;
 import com.github.javaparser.ast.stmt.ForEachStmt;
@@ -44,7 +52,10 @@ import com.github.javaparser.ast.stmt.ForStmt;
 import com.github.javaparser.ast.stmt.IfStmt;
 import com.github.javaparser.ast.stmt.Statement;
 import com.github.javaparser.ast.stmt.SwitchEntry;
+import com.github.javaparser.ast.stmt.TryStmt;
 import com.github.javaparser.ast.stmt.WhileStmt;
+import com.github.javaparser.ast.type.ClassOrInterfaceType;
+import com.github.javaparser.ast.type.PrimitiveType;
 import com.github.javaparser.utils.Pair;
 
 import kr.ac.unist.apr.gumtree.MyRootsClassifier;
@@ -1370,13 +1381,53 @@ public class Instrumenter {
      * @return wrapper method call expression for the given condition.
      * @see GlobalStates#wrapConditionExpr
      */
-    private MethodCallExpr genWrapper(long id) {
+    private Statement genWrapper(long id) {
         NameExpr classAccess=new NameExpr(GlobalStates.STATE_CLASS_NAME);
-        String methodName=GlobalStates.STATE_BRANCH_METHOD;
-        List<Expression> args=Arrays.asList(new LongLiteralExpr(Long.toString(id)));
+        NodeList<Statement> stmts=new NodeList<>();
 
-        MethodCallExpr wrapperCaller= new MethodCallExpr(classAccess, methodName, new NodeList<>(args));
-        return wrapperCaller;
+        // initialize
+        UnaryExpr initChecker=new UnaryExpr(new NameExpr(classAccess+"."+GlobalStates.STATE_IS_INITIALIZED), UnaryExpr.Operator.LOGICAL_COMPLEMENT);
+        MethodCallExpr initCall=new MethodCallExpr(classAccess, GlobalStates.STATE_INIT);
+        IfStmt initIfStmt=new IfStmt(initChecker, new ExpressionStmt(initCall), null);
+        stmts.add(initIfStmt);
+        
+        // current id
+        BinaryExpr initializer=new BinaryExpr(new LongLiteralExpr(Long.toString(id)),
+                                                new NameExpr(classAccess+"."+GlobalStates.STATE_PREV_ID), Operator.XOR);
+        VariableDeclarator currentIdDecl=new VariableDeclarator(PrimitiveType.longType(), "stateCurId",initializer);
+        VariableDeclarationExpr currentIdExpr=new VariableDeclarationExpr(currentIdDecl);
+        stmts.add(new ExpressionStmt(currentIdExpr));
+        
+        // write to file
+        NameExpr fileAccess=new NameExpr(GlobalStates.STATE_CLASS_NAME+"."+GlobalStates.STATE_RESULT_FILE);
+        MethodCallExpr toLong=new MethodCallExpr(new NameExpr("Long"), "toString", new NodeList<>(new NameExpr("stateCurId")));
+        NodeList<Expression> argsWrite=new NodeList<>();
+        argsWrite.add(new BinaryExpr(toLong, new StringLiteralExpr("\n"), Operator.PLUS));
+        MethodCallExpr writeToFile=new MethodCallExpr(fileAccess, "write",argsWrite);
+        stmts.add(new ExpressionStmt(writeToFile));
+
+        // flush
+        MethodCallExpr flush=new MethodCallExpr(fileAccess, "flush");
+        stmts.add(new ExpressionStmt(flush));
+
+        // update prev id
+        BinaryExpr updatePrevId=new BinaryExpr(new LongLiteralExpr(Long.toString(id)),
+                                                new LongLiteralExpr(Long.toString(1)), Operator.SIGNED_RIGHT_SHIFT);
+        AssignExpr updatePrevIdAssign=new AssignExpr(new NameExpr(classAccess+"."+GlobalStates.STATE_PREV_ID), updatePrevId, AssignExpr.Operator.ASSIGN);
+        stmts.add(new ExpressionStmt(updatePrevIdAssign));
+
+        // parent if statement
+        MethodCallExpr getEnv=new MethodCallExpr(new NameExpr("System"), "getenv", new NodeList<>(new StringLiteralExpr(GlobalStates.STATE_ENV_RECORD)));
+        MethodCallExpr envEqual=new MethodCallExpr(getEnv, "equals", new NodeList<>(new StringLiteralExpr("1")));
+        
+        // try-catch
+        BlockStmt body=new BlockStmt(stmts);
+        CatchClause catchClause=new CatchClause(new Parameter(new JavaParser().parseClassOrInterfaceType("Exception").getResult().get(),"e"+Long.toString(id)),
+                                                    new BlockStmt(new NodeList<>()));
+        TryStmt rootTryStmt=new TryStmt(body, new NodeList<>(catchClause), null);
+        IfStmt ifStmt=new IfStmt(envEqual, rootTryStmt, null);
+
+        return ifStmt;
     }
 
     /**
@@ -1392,11 +1443,11 @@ public class Instrumenter {
             Statement thenStmt=ifStmt.getThenStmt();
             if (thenStmt instanceof BlockStmt){
                 BlockStmt thenBlock=(BlockStmt)thenStmt;
-                thenBlock.getStatements().addFirst(new ExpressionStmt(genWrapper(ids.get(0))));
+                thenBlock.getStatements().addFirst(genWrapper(ids.get(0)));
             }
             else {
                 NodeList<Statement> thenStmts=new NodeList<>();
-                thenStmts.add(new ExpressionStmt(genWrapper(ids.get(0))));
+                thenStmts.add(genWrapper(ids.get(0)));
                 thenStmts.add(thenStmt);
                 BlockStmt thenBlock=new BlockStmt(thenStmts);
                 ifStmt.setThenStmt(thenBlock);
@@ -1407,11 +1458,11 @@ public class Instrumenter {
                 Statement elseStmt=ifStmt.getElseStmt().get();
                 if (elseStmt instanceof BlockStmt){
                     BlockStmt elseBlock=(BlockStmt)elseStmt;
-                    elseBlock.getStatements().addFirst(new ExpressionStmt(genWrapper(ids.get(1))));
+                    elseBlock.getStatements().addFirst(genWrapper(ids.get(1)));
                 }
                 else {
                     NodeList<Statement> elseStmts=new NodeList<>();
-                    elseStmts.add(new ExpressionStmt(genWrapper(ids.get(1))));
+                    elseStmts.add(genWrapper(ids.get(1)));
                     elseStmts.add(elseStmt);
                     BlockStmt elseBlock=new BlockStmt(elseStmts);
                     ifStmt.setElseStmt(elseBlock);
@@ -1426,11 +1477,11 @@ public class Instrumenter {
             Statement body=forStmt.getBody();
             if (body instanceof BlockStmt){
                 BlockStmt bodyBlock=(BlockStmt)body;
-                bodyBlock.getStatements().addFirst(new ExpressionStmt(genWrapper(ids.get(0))));
+                bodyBlock.getStatements().addFirst(genWrapper(ids.get(0)));
             }
             else {
                 NodeList<Statement> bodyStmts=new NodeList<>();
-                bodyStmts.add(new ExpressionStmt(genWrapper(ids.get(0))));
+                bodyStmts.add(genWrapper(ids.get(0)));
                 bodyStmts.add(body);
                 BlockStmt bodyBlock=new BlockStmt(bodyStmts);
                 forStmt.setBody(bodyBlock);
@@ -1444,11 +1495,11 @@ public class Instrumenter {
             Statement body=whileStmt.getBody();
             if (body instanceof BlockStmt){
                 BlockStmt bodyBlock=(BlockStmt)body;
-                bodyBlock.getStatements().addFirst(new ExpressionStmt(genWrapper(ids.get(0))));
+                bodyBlock.getStatements().addFirst(genWrapper(ids.get(0)));
             }
             else {
                 NodeList<Statement> bodyStmts=new NodeList<>();
-                bodyStmts.add(new ExpressionStmt(genWrapper(ids.get(0))));
+                bodyStmts.add(genWrapper(ids.get(0)));
                 bodyStmts.add(body);
                 BlockStmt bodyBlock=new BlockStmt(bodyStmts);
                 whileStmt.setBody(bodyBlock);
@@ -1462,11 +1513,11 @@ public class Instrumenter {
             Statement body=doStmt.getBody();
             if (body instanceof BlockStmt){
                 BlockStmt bodyBlock=(BlockStmt)body;
-                bodyBlock.getStatements().addFirst(new ExpressionStmt(genWrapper(ids.get(0))));
+                bodyBlock.getStatements().addFirst(genWrapper(ids.get(0)));
             }
             else {
                 NodeList<Statement> bodyStmts=new NodeList<>();
-                bodyStmts.add(new ExpressionStmt(genWrapper(ids.get(0))));
+                bodyStmts.add(genWrapper(ids.get(0)));
                 bodyStmts.add(body);
                 BlockStmt bodyBlock=new BlockStmt(bodyStmts);
                 doStmt.setBody(bodyBlock);
@@ -1479,11 +1530,11 @@ public class Instrumenter {
             Statement body=forEachStmt.getBody();
             if (body instanceof BlockStmt){
                 BlockStmt bodyBlock=(BlockStmt)body;
-                bodyBlock.getStatements().addFirst(new ExpressionStmt(genWrapper(ids.get(0))));
+                bodyBlock.getStatements().addFirst(genWrapper(ids.get(0)));
             }
             else {
                 NodeList<Statement> bodyStmts=new NodeList<>();
-                bodyStmts.add(new ExpressionStmt(genWrapper(ids.get(0))));
+                bodyStmts.add(genWrapper(ids.get(0)));
                 bodyStmts.add(body);
                 BlockStmt bodyBlock=new BlockStmt(bodyStmts);
                 forEachStmt.setBody(bodyBlock);
