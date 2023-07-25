@@ -37,76 +37,83 @@ public class GlobalStates {
   
   /** Full name of this class */
   public static final String STATE_CLASS_NAME="kr.ac.unist.apr.GlobalStates";
-  /** wrapper method name of switch-case */
-  public static final String STATE_BRANCH_METHOD="wrapBranch";
-  /** method name to save the info */
-  public static final String STATE_SAVE_INFO="saveBranchInfo";
+  /** Name of initializer */
+  public static final String STATE_INIT="initialize";
+  
+  /** Name of variable to check initialized */
+  public static final String STATE_IS_INITIALIZED="isInitialized";
+  /** Name of variable of previous ID */
+  public static final String STATE_PREV_ID="previousId";
+  /** Name of variable of map */
+  public static final String STATE_BRANCH_COUNT="branchCount";
+
+  /** Name of environment variable to record covered branch or not */
+  public static final String STATE_ENV_RECORD="GREYBOX_BRANCH";
   
   /**
    * The executed branch ID in previous. Used for calculate current ID.
    */
-  private static long previousId=0;
-  
+  public static int previousId=0;
   /**
-   * We do not want to add shutdown hook more than once.
-   */
-  private static boolean isShutdownHookSet=false;
-
-  private static FileWriter resultFile=null;
-
-  /**
-   * Wrapper for each branch.
+   * The number of execution of each branch.
    * <p>
-   *  This method is called by instrumented code.
-   * 
-   *  This method counts the executed number of each branch.
+   *  Maximum number of branch is 200000.
    * </p>
    */
-  public static void wrapBranch(long id){
+  public static int[] branchCount=new int[200000]; // Make enough size of array to reduce the overhead.
+  
+  /**
+   * Flag to check this class is initialized or not.
+   */
+  public static boolean isInitialized=false;
+
+  /**
+   * File writer to save the map.
+   */
+  public static FileWriter resultFile=null;
+
+  /**
+   * Initialize this class.
+   * <p>
+   *  This method should be called once before run the instrumented code.
+   * 
+   *  This method adds shutdown hook to save the map to the file.
+   *  File name should be defined in environment variable GREYBOX_RESULT.
+   * 
+   *  How to use this method:
+   *  <pre>
+   *    if (!GlobalStates.isInitialized)
+   *      GlobalStates.initialize();
+   *  </pre>
+   *  This will update the flag isInitialized to true.
+   * </p>
+   */
+  public static void initialize() {
     if (System.getenv("GREYBOX_BRANCH").equals("1")) {
-      try{
-        if (!isShutdownHookSet) {
-          resultFile=new FileWriter(System.getenv("GREYBOX_RESULT"));
-        }
-        
-        long currentKey=id^previousId;
-
-        resultFile.write(Long.toString(currentKey)+"\n");
-        resultFile.flush();
-    
-        previousId=id>>1;
-      }
-      catch (Exception e) {
-        FileWriter fw;
-        try {
-          fw=new FileWriter("/tmp/greybox.err");
-          fw.write(e.getMessage());
-          fw.close();
-        } catch (IOException e1) {
-          
-        }
-
-      }
-
-      if (!isShutdownHookSet) {
-        Runtime.getRuntime().addShutdownHook(new Thread(new Runnable() {
-          public void run() {
-            try {
-              resultFile.close();
-            } catch (IOException e) {
-              FileWriter fw;
-              try {
-                fw=new FileWriter("/tmp/greybox.err");
-                fw.write(e.getMessage());
-                fw.close();
-              } catch (IOException e1) {
-                
+      Runtime.getRuntime().addShutdownHook(new Thread(new Runnable() {
+        public void run() {
+          try {
+            resultFile=new FileWriter(System.getenv("GREYBOX_RESULT"));
+            for (int i=0;i<branchCount.length;i++) {
+              if (branchCount[i]>0) {
+                resultFile.write(i+":"+branchCount[i]+"\n");
               }
             }
+            resultFile.close();
+          } catch (IOException e) {
+            FileWriter fw;
+            try {
+              fw=new FileWriter("/tmp/greybox.err");
+              fw.write(e.getMessage());
+              fw.close();
+            } catch (IOException e1) {
+              System.err.println("Cannot open error file: /tmp/greybox.err");
+              e1.printStackTrace();
+            }
           }
-        }));
-        isShutdownHookSet=true;
-      }
+        }
+      }));
     }
+    isInitialized=true;
   }
 }
