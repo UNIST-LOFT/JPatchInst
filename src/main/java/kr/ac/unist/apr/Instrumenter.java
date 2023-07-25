@@ -53,11 +53,16 @@ import com.github.javaparser.ast.stmt.WhileStmt;
 import com.github.javaparser.ast.type.PrimitiveType;
 import com.github.javaparser.utils.Pair;
 
+import com.google.gson.Gson;
+import com.google.gson.GsonBuilder;
+
 import kr.ac.unist.apr.gumtree.MyRootsClassifier;
 import kr.ac.unist.apr.utils.Path;
 import kr.ac.unist.apr.visitor.OriginalSourceVisitor;
 import kr.ac.unist.apr.visitor.PatchedSourceVisitor;
 import kr.ac.unist.apr.visitor.TargetSourceVisitor;
+import kr.ac.unist.apr.visitor.BranchInfoVisitor;
+import kr.ac.unist.apr.Branch;
 
 /**
  * Main class of instrumentation.
@@ -77,7 +82,8 @@ public class Instrumenter {
     private TreeContext patchedRootNode;
     private Map<String,TreeContext> targetNodes=new HashMap<>(); // this list do not contain patched source
     private Map<String,TreeContext> originalNodes=new HashMap<>(); // this list do not contain patched source
-    private Map<String,Pair<List<Node>,List<List<Long>>>> nodeToId=new HashMap<>();
+    private Map<String,Pair<List<Node>,List<List<Long>>>> nodeToId=new HashMap<>(); //Generate same branch id in org program and patched program
+    private List<Branch> branches=new ArrayList<>(); //Generate same branch id in org program and patched program
 
     private String originalSourcePath;
     private String targetSourcePath;
@@ -138,8 +144,8 @@ public class Instrumenter {
             fReader.close();
             bReader.close();
             if (originalFilePath!=null){
-                File sourcFile=new File(originalFilePath);
-                String sourcePath=sourcFile.getAbsolutePath();
+                File sourceFile=new File(originalFilePath);
+                String sourcePath=sourceFile.getAbsolutePath();
                 originalNodes.put(Path.removeSrcPath(source, originalSourcePath),sourceCtxt);
                 if (source.equals(sourcePath))
                     originalRootNode = sourceCtxt;
@@ -153,7 +159,7 @@ public class Instrumenter {
         List<String> allSources=Path.getAllSources(new File(targetSourcePath));
         for (String source:allSources){
             if (source.contains("kr/ac/unist/apr")) continue;
-            JavaParserGenerator parser = new JavaParserGenerator();
+            JavaParserGenerator parser = new JavaParserGenerator(); 
             FileReader fReader = new FileReader(source);
             BufferedReader bReader = new BufferedReader(fReader);
             if (bReader.readLine().equals("// __INSTRUMENTED__")) {
@@ -176,8 +182,8 @@ public class Instrumenter {
             fReader.close();
             bReader.close();
             if (patchedFilePath!=null){
-                File sourcFile=new File(patchedFilePath);
-                String sourcePath=sourcFile.getAbsolutePath();
+                File sourceFile=new File(patchedFilePath);
+                String sourcePath=sourceFile.getAbsolutePath();
                 if (source.equals(sourcePath))
                     patchedRootNode = targetCtxt;
                 else
@@ -209,6 +215,29 @@ public class Instrumenter {
             originalSourceVisitor=new OriginalSourceVisitor();
             originalSourceVisitor.visitPreOrder(originalCtxt.getValue().getRoot().getJParserNode());
             nodeToId.put(originalCtxt.getKey(), originalSourceVisitor.getNodeToId());
+        }
+
+        //collect info for each branch in original AST 
+        String buggyProj = System.getenv("SIMAPR_BUGGY_PROJECT");
+        String filePath = "/root/project/SimAPR/experiments/tbar/result/branchInfo/" + buggyProj + "/branchInfo.json";
+        String directoryPath = "/root/project/SimAPR/experiments/tbar/result/branchInfo/" + buggyProj;
+        File directory = new File(directoryPath);
+
+        if(!directory.exists()) {
+            directory.mkdirs();
+            BranchInfoVisitor branchInfoVisitor;
+            for (Map.Entry<String,TreeContext> originalCtxt:originalNodes.entrySet()){
+                branchInfoVisitor=new BranchInfoVisitor(originalCtxt.getKey()); 
+                branchInfoVisitor.visitPreOrder(originalCtxt.getValue().getRoot().getJParserNode());  
+                branches.addAll(branchInfoVisitor.getBranches());
+            }
+            Gson gson = new GsonBuilder().setPrettyPrinting().create();
+            String json = gson.toJson(branches);
+            try (FileWriter fileWriter = new FileWriter(filePath)) {
+                fileWriter.write(json);
+            } catch (IOException e) {
+                e.printStackTrace();
+            }
         }
 
         // Instrument target program without patched file
