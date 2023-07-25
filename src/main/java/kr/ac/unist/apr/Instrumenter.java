@@ -7,7 +7,6 @@ import java.io.FileWriter;
 import java.io.IOException;
 import java.lang.reflect.Method;
 import java.util.ArrayList;
-import java.util.Arrays;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
@@ -20,7 +19,6 @@ import com.github.gumtreediff.matchers.Matcher;
 import com.github.gumtreediff.matchers.Matchers;
 import com.github.gumtreediff.tree.ITree;
 import com.github.gumtreediff.tree.TreeContext;
-import com.github.javaparser.JavaParser;
 import com.github.javaparser.ast.Node;
 import com.github.javaparser.ast.NodeList;
 import com.github.javaparser.ast.body.BodyDeclaration;
@@ -29,10 +27,10 @@ import com.github.javaparser.ast.body.ConstructorDeclaration;
 import com.github.javaparser.ast.body.EnumDeclaration;
 import com.github.javaparser.ast.body.FieldDeclaration;
 import com.github.javaparser.ast.body.MethodDeclaration;
-import com.github.javaparser.ast.body.Parameter;
 import com.github.javaparser.ast.body.TypeDeclaration;
 import com.github.javaparser.ast.body.VariableDeclarator;
 import com.github.javaparser.ast.comments.LineComment;
+import com.github.javaparser.ast.expr.ArrayAccessExpr;
 import com.github.javaparser.ast.expr.AssignExpr;
 import com.github.javaparser.ast.expr.BinaryExpr;
 import com.github.javaparser.ast.expr.Expression;
@@ -44,7 +42,6 @@ import com.github.javaparser.ast.expr.UnaryExpr;
 import com.github.javaparser.ast.expr.VariableDeclarationExpr;
 import com.github.javaparser.ast.expr.BinaryExpr.Operator;
 import com.github.javaparser.ast.stmt.BlockStmt;
-import com.github.javaparser.ast.stmt.CatchClause;
 import com.github.javaparser.ast.stmt.DoStmt;
 import com.github.javaparser.ast.stmt.ExpressionStmt;
 import com.github.javaparser.ast.stmt.ForEachStmt;
@@ -52,9 +49,7 @@ import com.github.javaparser.ast.stmt.ForStmt;
 import com.github.javaparser.ast.stmt.IfStmt;
 import com.github.javaparser.ast.stmt.Statement;
 import com.github.javaparser.ast.stmt.SwitchEntry;
-import com.github.javaparser.ast.stmt.TryStmt;
 import com.github.javaparser.ast.stmt.WhileStmt;
-import com.github.javaparser.ast.type.ClassOrInterfaceType;
 import com.github.javaparser.ast.type.PrimitiveType;
 import com.github.javaparser.utils.Pair;
 
@@ -1394,21 +1389,14 @@ public class Instrumenter {
         // current id
         BinaryExpr initializer=new BinaryExpr(new LongLiteralExpr(Long.toString(id)),
                                                 new NameExpr(classAccess+"."+GlobalStates.STATE_PREV_ID), Operator.XOR);
-        VariableDeclarator currentIdDecl=new VariableDeclarator(PrimitiveType.longType(), "stateCurId",initializer);
+        VariableDeclarator currentIdDecl=new VariableDeclarator(PrimitiveType.intType(), "stateCurId"+Long.toString(id),initializer);
         VariableDeclarationExpr currentIdExpr=new VariableDeclarationExpr(currentIdDecl);
         stmts.add(new ExpressionStmt(currentIdExpr));
         
-        // write to file
-        NameExpr fileAccess=new NameExpr(GlobalStates.STATE_CLASS_NAME+"."+GlobalStates.STATE_RESULT_FILE);
-        MethodCallExpr toLong=new MethodCallExpr(new NameExpr("Long"), "toString", new NodeList<>(new NameExpr("stateCurId")));
-        NodeList<Expression> argsWrite=new NodeList<>();
-        argsWrite.add(new BinaryExpr(toLong, new StringLiteralExpr("\n"), Operator.PLUS));
-        MethodCallExpr writeToFile=new MethodCallExpr(fileAccess, "write",argsWrite);
-        stmts.add(new ExpressionStmt(writeToFile));
-
-        // flush
-        MethodCallExpr flush=new MethodCallExpr(fileAccess, "flush");
-        stmts.add(new ExpressionStmt(flush));
+        // update array
+        ArrayAccessExpr arrayAccess=new ArrayAccessExpr(new NameExpr(classAccess+"."+GlobalStates.STATE_BRANCH_COUNT), new NameExpr("stateCurId"+Long.toString(id)));
+        UnaryExpr arrayUpdate=new UnaryExpr(arrayAccess, UnaryExpr.Operator.POSTFIX_INCREMENT);
+        stmts.add(new ExpressionStmt(arrayUpdate));
 
         // update prev id
         BinaryExpr updatePrevId=new BinaryExpr(new LongLiteralExpr(Long.toString(id)),
@@ -1419,13 +1407,8 @@ public class Instrumenter {
         // parent if statement
         MethodCallExpr getEnv=new MethodCallExpr(new NameExpr("System"), "getenv", new NodeList<>(new StringLiteralExpr(GlobalStates.STATE_ENV_RECORD)));
         MethodCallExpr envEqual=new MethodCallExpr(getEnv, "equals", new NodeList<>(new StringLiteralExpr("1")));
-        
-        // try-catch
         BlockStmt body=new BlockStmt(stmts);
-        CatchClause catchClause=new CatchClause(new Parameter(new JavaParser().parseClassOrInterfaceType("Exception").getResult().get(),"e"+Long.toString(id)),
-                                                    new BlockStmt(new NodeList<>()));
-        TryStmt rootTryStmt=new TryStmt(body, new NodeList<>(catchClause), null);
-        IfStmt ifStmt=new IfStmt(envEqual, rootTryStmt, null);
+        IfStmt ifStmt=new IfStmt(envEqual, body, null);
 
         return ifStmt;
     }
@@ -1551,15 +1534,41 @@ public class Instrumenter {
             throw new RuntimeException("Size of IDs for switch case should be 1, but: "+ids.size());
 
         NameExpr classAccess=new NameExpr(GlobalStates.STATE_CLASS_NAME);
-        String methodName=GlobalStates.STATE_BRANCH_METHOD;
-        List<Expression> args=Arrays.asList(new LongLiteralExpr(Long.toString(ids.get(0))));
+        NodeList<Statement> stmts=new NodeList<>();
 
-        MethodCallExpr newMethod=new MethodCallExpr(classAccess, methodName, new NodeList<>(args));
-        ExpressionStmt newStmt=new ExpressionStmt(newMethod);
+        // initialize
+        UnaryExpr initChecker=new UnaryExpr(new NameExpr(classAccess+"."+GlobalStates.STATE_IS_INITIALIZED), UnaryExpr.Operator.LOGICAL_COMPLEMENT);
+        MethodCallExpr initCall=new MethodCallExpr(classAccess, GlobalStates.STATE_INIT);
+        IfStmt initIfStmt=new IfStmt(initChecker, new ExpressionStmt(initCall), null);
+        stmts.add(initIfStmt);
+        
+        // current id
+        BinaryExpr initializer=new BinaryExpr(new LongLiteralExpr(Long.toString(ids.get(0))),
+                                                new NameExpr(classAccess+"."+GlobalStates.STATE_PREV_ID), Operator.XOR);
+        VariableDeclarator currentIdDecl=new VariableDeclarator(PrimitiveType.intType(), "stateCurId"+Long.toString(ids.get(0)),initializer);
+        VariableDeclarationExpr currentIdExpr=new VariableDeclarationExpr(currentIdDecl);
+        stmts.add(new ExpressionStmt(currentIdExpr));
+        
+        // update array
+        ArrayAccessExpr arrayAccess=new ArrayAccessExpr(new NameExpr(classAccess+"."+GlobalStates.STATE_BRANCH_COUNT), new NameExpr("stateCurId"+Long.toString(ids.get(0))));
+        UnaryExpr arrayUpdate=new UnaryExpr(arrayAccess, UnaryExpr.Operator.POSTFIX_INCREMENT);
+        stmts.add(new ExpressionStmt(arrayUpdate));
+        
+        // update prev id
+        BinaryExpr updatePrevId=new BinaryExpr(new LongLiteralExpr(Long.toString(ids.get(0))),
+                                                new LongLiteralExpr(Long.toString(1)), Operator.SIGNED_RIGHT_SHIFT);
+        AssignExpr updatePrevIdAssign=new AssignExpr(new NameExpr(classAccess+"."+GlobalStates.STATE_PREV_ID), updatePrevId, AssignExpr.Operator.ASSIGN);
+        stmts.add(new ExpressionStmt(updatePrevIdAssign));
+
+        // parent if statement
+        MethodCallExpr getEnv=new MethodCallExpr(new NameExpr("System"), "getenv", new NodeList<>(new StringLiteralExpr(GlobalStates.STATE_ENV_RECORD)));
+        MethodCallExpr envEqual=new MethodCallExpr(getEnv, "equals", new NodeList<>(new StringLiteralExpr("1")));
+        BlockStmt body=new BlockStmt(stmts);
+        IfStmt ifStmt=new IfStmt(envEqual, body, null);
 
         // Add new method call to case/default statement
-        NodeList<Statement> stmts=switchCase.getStatements();
-        stmts.add(0, newStmt);
-        switchCase.setStatements(stmts);
+        NodeList<Statement> caseBody=switchCase.getStatements();
+        caseBody.add(0, ifStmt);
+        switchCase.setStatements(caseBody);
     }
 }
