@@ -46,7 +46,9 @@ public class BranchInfoVisitor extends TreeVisitor {
         branches=new ArrayList<>();
     }
 
-
+    public List<Branch> getBranches(){
+        return branches;
+    }
     /**
      * Visit the given node.
      * <p>
