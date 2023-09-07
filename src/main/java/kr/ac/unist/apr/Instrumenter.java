@@ -2,6 +2,8 @@ package kr.ac.unist.apr;
 
 import java.io.File;
 import java.io.FileInputStream;
+import java.io.FileNotFoundException;
+import java.io.FileOutputStream;
 import java.io.IOException;
 import java.util.ArrayDeque;
 import java.util.Deque;
@@ -36,6 +38,8 @@ import kr.ac.unist.apr.visitor.MethodInstrumenter;
  * @author Youngjae Kim
  */
 public class Instrumenter {
+    private String targetPath;
+
     private Map<String,ClassReader> targetNodes=new HashMap<>();
     private Map<String,ClassReader> originalNodes=new HashMap<>();
     public static Map<Integer,String> hashStrings=new HashMap<>();
@@ -54,6 +58,8 @@ public class Instrumenter {
      */
     public Instrumenter(String targetSourcePath,
                     String originalSourcePath) throws IOException {
+        this.targetPath=targetSourcePath;
+
         // generate ClassReader for original source
         Main.LOGGER.log(Level.INFO, "Parse Instructions for original source...");
         List<String> allOriginalSources=Path.getAllSources(new File(originalSourcePath));
@@ -84,8 +90,9 @@ public class Instrumenter {
      * 
      *  This method guarantees that the branch IDs are always same.
      * </p>
+     * @throws FileNotFoundException
      */
-    public void instrument(){
+    public void instrument() throws IOException{
         // Visit original source visitor and get IDs
         // TODO: Cache/load this result with file
         Main.LOGGER.log(Level.INFO, "Instrument class file...");
@@ -100,10 +107,8 @@ public class Instrumenter {
             }
 
             ClassReader targetReader=targetNodes.get(originalCtxt.getKey());
-            ClassWriter writer=new ClassWriter(targetReader,0);
             ClassNode node=new ClassNode();
             targetReader.accept(node,0);
-            node.accept(writer);
 
             // Instrument every methods
             for (MethodNode methodInfo:node.methods) {
@@ -118,16 +123,33 @@ public class Instrumenter {
 
                     Map<LabelNode,InsnList> newInsns=instrumenter.getNewInsns();
                     for (Map.Entry<LabelNode,InsnList> entry:newInsns.entrySet()){
-                        methodInfo.instructions.insert(entry.getKey(), entry.getValue());
+                        int index=methodInfo.instructions.indexOf(entry.getKey());
+                        methodInfo.instructions.insert(methodInfo.instructions.get(index+1), entry.getValue());
                     }
+                    methodInfo.check(Opcodes.ASM9);
                 }
             }
             
             // Save instrumented file
-            // FileWriter writer = new FileWriter(targetSourcePath+"/"+targetCtxt.getKey());
-            // writer.write(targetNode.toString());
-            // writer.close();
+            ClassWriter writer2=new ClassWriter(ClassWriter.COMPUTE_MAXS);
+            classNode.accept(writer2);
+            
+            node.check(Opcodes.ASM9);
+            ClassWriter writer=new ClassWriter(ClassWriter.COMPUTE_MAXS);
+            node.accept(writer);
 
+            System.out.println("Orig: "+writer2.toByteArray().length+", Patched: "+writer.toByteArray().length);
+            byte[] newClass=writer.toByteArray();
+            if (targetPath.endsWith(".class")){
+                FileOutputStream fos=new FileOutputStream(targetPath);
+                fos.write(newClass);
+                fos.close();
+            }
+            else{
+                FileOutputStream fos=new FileOutputStream(targetPath+"/"+originalCtxt.getKey());
+                fos.write(newClass);
+                fos.close();
+            }
         }
     }
 

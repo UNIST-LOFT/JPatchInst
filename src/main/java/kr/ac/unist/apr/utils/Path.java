@@ -15,6 +15,13 @@ public class Path {
      * @return list of source files in absolute path.
      */
     public static List<String> getAllSources(File rootDirectory) {
+        if (rootDirectory.isFile()) {
+            List<String> sources = new ArrayList<>();
+            if (rootDirectory.getName().endsWith(".class"))
+                sources.add(rootDirectory.getAbsolutePath());
+            return sources;
+        }
+
         List<String> sources = new ArrayList<>();
         File[] files = rootDirectory.listFiles();
         for (File file : files) {
