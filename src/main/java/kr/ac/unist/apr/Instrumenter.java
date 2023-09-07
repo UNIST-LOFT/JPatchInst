@@ -16,6 +16,8 @@ import org.objectweb.asm.Opcodes;
 import org.objectweb.asm.tree.AbstractInsnNode;
 import org.objectweb.asm.tree.ClassNode;
 import org.objectweb.asm.tree.InsnList;
+import org.objectweb.asm.tree.JumpInsnNode;
+import org.objectweb.asm.tree.LabelNode;
 import org.objectweb.asm.tree.MethodNode;
 
 import kr.ac.unist.apr.utils.InsnNodeUtils;
@@ -36,11 +38,10 @@ import kr.ac.unist.apr.visitor.MethodInstrumenter;
 public class Instrumenter {
     private Map<String,ClassReader> targetNodes=new HashMap<>();
     private Map<String,ClassReader> originalNodes=new HashMap<>();
-    private Map<Integer,String> hashStrings=new HashMap<>();
+    public static Map<Integer,String> hashStrings=new HashMap<>();
 
     public static final int MAX_PREV_INSNS=10;
     private static int prevId=0;
-    public static Map<Integer,Integer> ids=new HashMap<>();
 
     /**
      * Default constructor.
@@ -92,8 +93,10 @@ public class Instrumenter {
             ClassNode classNode=new ClassNode();
             originalCtxt.getValue().accept(classNode, 0);
 
+            Map<MethodNode,Map<Integer,Integer>> methodIds=new HashMap<>();
             for (MethodNode methodInfo:classNode.methods){
-                computeBranchIds(methodInfo.instructions, originalCtxt.getKey(), methodInfo.name, methodInfo.desc);
+                methodIds.put(methodInfo,
+                        computeBranchIds(methodInfo.instructions, originalCtxt.getKey(), methodInfo.name, methodInfo.desc));
             }
 
             ClassReader targetReader=targetNodes.get(originalCtxt.getKey());
@@ -105,11 +108,19 @@ public class Instrumenter {
             // Instrument every methods
             for (MethodNode methodInfo:node.methods) {
                 // Instrument every labels
-                MethodInstrumenter instrumenter=new MethodInstrumenter(Opcodes.ASM9,originalCtxt.getKey(), methodInfo.access,
-                                        methodInfo.name, methodInfo.desc, methodInfo.signature,
-                                        methodInfo.exceptions.toArray(new String[0]));
-                methodInfo.accept(instrumenter);
-                methodInfo.check(Opcodes.ASM9);
+                MethodNode sourceMethod=InsnNodeUtils.findSameMethod(methodInfo, methodIds.keySet());
+                if (sourceMethod!=null){
+                    MethodInstrumenter instrumenter=new MethodInstrumenter(Opcodes.ASM9,originalCtxt.getKey(), methodInfo.access,
+                                            methodInfo.name, methodInfo.desc, methodInfo.signature,
+                                            methodInfo.exceptions.toArray(new String[0]),
+                                            methodIds.get(sourceMethod));
+                    methodInfo.accept(instrumenter);
+
+                    Map<LabelNode,InsnList> newInsns=instrumenter.getNewInsns();
+                    for (Map.Entry<LabelNode,InsnList> entry:newInsns.entrySet()){
+                        methodInfo.instructions.insert(entry.getKey(), entry.getValue());
+                    }
+                }
             }
             
             // Save instrumented file
@@ -127,17 +138,28 @@ public class Instrumenter {
      * @param methodName method name
      * @param methodDesc method descriptor
      */
-    public void computeBranchIds(InsnList instructions, String className, String methodName, String methodDesc) {
-        Deque<AbstractInsnNode> prevInsns=new ArrayDeque<>();
+    public Map<Integer,Integer> computeBranchIds(InsnList instructions, String className, String methodName, String methodDesc) {
+        Map<Integer,Integer> ids=new HashMap<>();
 
         for (int i=0;i<instructions.size();i++) {
             AbstractInsnNode insn=instructions.get(i);
             
             // Compute branch ID
             if (insn.getType()==AbstractInsnNode.JUMP_INSN) {
+                JumpInsnNode jumpInsn=(JumpInsnNode)insn;
+                LabelNode curLabel=jumpInsn.label;
+                int labelIndex=instructions.indexOf(curLabel);
+
+                Deque<AbstractInsnNode> prevInsns=new ArrayDeque<>();
+                for (int j=labelIndex-1;j>=0 && j>=Instrumenter.MAX_PREV_INSNS;j--) {
+                    prevInsns.add(instructions.get(j));
+                }
+
                 String hashSource=className+"::"+methodName+"::"+methodDesc+"::";
                 for (AbstractInsnNode prevInsn:prevInsns) {
-                    hashSource+=InsnNodeUtils.convertNodeToString(prevInsn)+";";
+                    String nodeString=InsnNodeUtils.convertNodeToString(prevInsn);
+                    if (nodeString.length()>0)
+                        hashSource+=nodeString+";";
                 }
                 int hashed=hashSource.hashCode();
                 hashStrings.put(hashed, hashSource);
@@ -146,12 +168,9 @@ public class Instrumenter {
                     Main.LOGGER.warning("Duplicated ID: "+hashed);
                 ids.put(hashed,prevId++);
             }
-
-            // Update queue
-            prevInsns.add(insn);
-            if (prevInsns.size()>MAX_PREV_INSNS)
-                prevInsns.remove();
         }
+
+        return ids;
     }
 
 }

@@ -1,5 +1,7 @@
 package kr.ac.unist.apr.utils;
 
+import java.util.List;
+
 import org.objectweb.asm.tree.AbstractInsnNode;
 import org.objectweb.asm.tree.FieldInsnNode;
 import org.objectweb.asm.tree.FrameNode;
@@ -7,6 +9,7 @@ import org.objectweb.asm.tree.IincInsnNode;
 import org.objectweb.asm.tree.IntInsnNode;
 import org.objectweb.asm.tree.InvokeDynamicInsnNode;
 import org.objectweb.asm.tree.MethodInsnNode;
+import org.objectweb.asm.tree.MethodNode;
 import org.objectweb.asm.tree.MultiANewArrayInsnNode;
 import org.objectweb.asm.tree.TableSwitchInsnNode;
 import org.objectweb.asm.tree.TypeInsnNode;
@@ -31,7 +34,7 @@ public class InsnNodeUtils {
                 return "Frame:"+node.getOpcode()+","+frameNode.type;
             case AbstractInsnNode.IINC_INSN:
                 IincInsnNode iincInsnNode=(IincInsnNode)node;
-                return "IincInsn:"+node.getOpcode()+","+iincInsnNode.incr+","+iincInsnNode.var;
+                return "IincInsn:"+node.getOpcode()+","+iincInsnNode.incr;
             case AbstractInsnNode.INSN:
                 return "Insn:"+node.getOpcode();
             case AbstractInsnNode.INT_INSN:
@@ -63,10 +66,23 @@ public class InsnNodeUtils {
                 TypeInsnNode typeInsnNode=(TypeInsnNode)node;
                 return "TypeInsn:"+node.getOpcode()+","+typeInsnNode.desc;
             case AbstractInsnNode.VAR_INSN:
-                VarInsnNode varInsnNode=(VarInsnNode)node;
-                return "VarInsn:"+node.getOpcode()+","+varInsnNode.var;
+                return "VarInsn:"+node.getOpcode();
             default:
                 throw new RuntimeException("Node type not found: "+node.getType());
         }
+    }
+
+    public static boolean compareMethodNode(MethodNode a,MethodNode b) {
+        return a.name.equals(b.name) && a.desc.equals(b.desc);
+    }
+
+    public static MethodNode findSameMethod(MethodNode source,Iterable<MethodNode> target) {
+        for (MethodNode node:target) {
+            if (compareMethodNode(source,node)) {
+                return node;
+            }
+        }
+
+        return null;
     }
 }

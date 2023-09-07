@@ -2,11 +2,15 @@ package kr.ac.unist.apr.visitor;
 
 import java.util.ArrayDeque;
 import java.util.Deque;
+import java.util.HashMap;
+import java.util.Map;
 
 import org.objectweb.asm.Label;
 import org.objectweb.asm.Opcodes;
 import org.objectweb.asm.tree.AbstractInsnNode;
 import org.objectweb.asm.tree.FieldInsnNode;
+import org.objectweb.asm.tree.InsnList;
+import org.objectweb.asm.tree.LabelNode;
 import org.objectweb.asm.tree.LdcInsnNode;
 import org.objectweb.asm.tree.MethodInsnNode;
 import org.objectweb.asm.tree.MethodNode;
@@ -20,6 +24,11 @@ import kr.ac.unist.apr.utils.InsnNodeUtils;
  */
 public class MethodInstrumenter extends MethodNode {
     private String className;
+    private Map<Integer,Integer> ids;
+
+    private int currentLine;
+
+    private Map<LabelNode,InsnList> newInsns=new HashMap<>();
 
     /**
      * Default constructor.
@@ -32,9 +41,10 @@ public class MethodInstrumenter extends MethodNode {
      * @param exceptions method exceptions
      */
     public MethodInstrumenter(int api,String className, int access, String name, String descriptor, String signature,
-            String[] exceptions) {
+            String[] exceptions,Map<Integer,Integer> ids) {
         super(api, access, name, descriptor, signature, exceptions);
         this.className=className;
+        this.ids=ids;
     }
 
     /**
@@ -42,28 +52,46 @@ public class MethodInstrumenter extends MethodNode {
      */
     @Override
     public void visitLabel(Label label) {
-        super.visitLabel(label);      
+        super.visitLabel(label);
+        
+        if (currentLine==0) return; // Between methods/fields
+
         String hashSource=className+"::"+super.name+"::"+super.desc+"::";
 
         // Get k previous instructions
         Deque<AbstractInsnNode> prevInsns=new ArrayDeque<>();
-        for (int i=instructions.size()-1;i>=0 || i>=Instrumenter.MAX_PREV_INSNS;i--) {
+        for (int i=instructions.size()-1;i>=0 && i>=Instrumenter.MAX_PREV_INSNS;i--) {
             prevInsns.add(instructions.get(i));
         }
 
         for (AbstractInsnNode prevInsn:prevInsns) {
-            hashSource+=InsnNodeUtils.convertNodeToString(prevInsn)+";";
+            String nodeString=InsnNodeUtils.convertNodeToString(prevInsn);
+            if (nodeString.length()>0)
+                hashSource+=nodeString+";";
         }
         int hashed=hashSource.hashCode();
 
-        if (Instrumenter.ids.containsKey(hashed)){
-            int branchId=Instrumenter.ids.get(hashed);
+        if (ids.containsKey(hashed)){
+            int branchId=ids.get(hashed);
             // TODO: Change to actual instrumentation (now it is just print)
-            instructions.add(new FieldInsnNode(Opcodes.GETSTATIC, "java/lang/System", "out",
+            System.out.println(className+"::"+(currentLine+1)+"::"+branchId);
+            InsnList newInsns=new InsnList();
+            newInsns.add(new FieldInsnNode(Opcodes.GETSTATIC, "java/lang/System", "out",
                                                     "Ljava/io/PrintStream;"));
-            instructions.add(new LdcInsnNode("Branch ID:"+branchId));
-            instructions.add(new MethodInsnNode(Opcodes.INVOKEVIRTUAL, "java/io/PrintStream", "println",
+            newInsns.add(new LdcInsnNode("Branch ID:"+branchId));
+            newInsns.add(new MethodInsnNode(Opcodes.INVOKEVIRTUAL, "java/io/PrintStream", "println",
                                         "(Ljava/lang/String;)V",false));
+            this.newInsns.put((LabelNode)instructions.getLast(), newInsns);
         }
+    }
+
+    @Override
+    public void visitLineNumber(int line, Label start) {
+        super.visitLineNumber(line, start);
+        currentLine=line;
+    }
+
+    public Map<LabelNode,InsnList> getNewInsns() {
+        return newInsns;
     }
 }
