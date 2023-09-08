@@ -22,5 +22,5 @@ public class InstrumentClassWriter extends ClassWriter{
             // Return default class loader
             return super.getClassLoader();
         }
-    }    
+    }
 }

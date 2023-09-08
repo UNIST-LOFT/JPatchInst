@@ -69,7 +69,6 @@ public class MethodInstrumenter extends MethodNode {
 
         if (ids.containsKey(hashed)){
             int branchId=ids.get(hashed);
-            // TODO: Change to actual instrumentation (now it is just print)
             InsnList newInsns=Instruction.insertNewInstructions(branchId);
             this.newInsns.put((LabelNode)instructions.getLast(), newInsns);
         }

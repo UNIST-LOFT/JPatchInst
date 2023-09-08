@@ -17,6 +17,7 @@ import org.objectweb.asm.ClassWriter;
 import org.objectweb.asm.Opcodes;
 import org.objectweb.asm.tree.AbstractInsnNode;
 import org.objectweb.asm.tree.ClassNode;
+import org.objectweb.asm.tree.FieldNode;
 import org.objectweb.asm.tree.InsnList;
 import org.objectweb.asm.tree.JumpInsnNode;
 import org.objectweb.asm.tree.LabelNode;
@@ -98,18 +99,31 @@ public class Instrumenter {
         // TODO: Cache/load this result with file
         Main.LOGGER.log(Level.INFO, "Instrument class file...");
         for (Map.Entry<String,ClassReader> originalCtxt:originalNodes.entrySet()){
+            // Source class file
             ClassNode classNode=new ClassNode();
             originalCtxt.getValue().accept(classNode, 0);
+
+            // Target class file
+            ClassReader targetReader=targetNodes.get(originalCtxt.getKey());
+            ClassNode node=new ClassNode();
+            targetReader.accept(node,0);
+
+            // Skip if already instrumented
+            boolean skip=false;
+            for (FieldNode field:node.fields){
+                if (field.name.equals("greyboxInstrumented")){
+                    Main.LOGGER.log(Level.INFO, "Skip instrumenting "+originalCtxt.getKey());
+                    skip=true;
+                    break;
+                }
+            }
+            if (skip) continue;
 
             Map<MethodNode,Map<Integer,Integer>> methodIds=new HashMap<>();
             for (MethodNode methodInfo:classNode.methods){
                 methodIds.put(methodInfo,
                         computeBranchIds(methodInfo.instructions, originalCtxt.getKey(), methodInfo.name, methodInfo.desc));
             }
-
-            ClassReader targetReader=targetNodes.get(originalCtxt.getKey());
-            ClassNode node=new ClassNode();
-            targetReader.accept(node,0);
 
             // Instrument every methods
             for (MethodNode methodInfo:node.methods) {
@@ -132,15 +146,18 @@ public class Instrumenter {
                 }
             }
             
-            // Save instrumented file
+            // Create class writer for original to get the size
             ClassWriter writer2=new InstrumentClassWriter(targetPath,ClassWriter.COMPUTE_MAXS|ClassWriter.COMPUTE_FRAMES);
             classNode.accept(writer2);
             
+            // Save instrumented file
+            // Add dummy field to check instrumented
+            node.fields.add(new FieldNode(Opcodes.ACC_PUBLIC + Opcodes.ACC_FINAL + Opcodes.ACC_STATIC, "greyboxInstrumented", "I", null, new Integer(0)));
             node.check(Opcodes.ASM9);
             ClassWriter writer=new InstrumentClassWriter(targetPath,ClassWriter.COMPUTE_MAXS|ClassWriter.COMPUTE_FRAMES);
             node.accept(writer);
 
-            System.out.println("Orig: "+writer2.toByteArray().length+", Patched: "+writer.toByteArray().length);
+            Main.LOGGER.info("Instrumenting "+originalCtxt.getKey()+" - Orig: "+writer2.toByteArray().length+", Patched: "+writer.toByteArray().length);
             byte[] newClass=writer.toByteArray();
             if (targetPath.endsWith(".class")){
                 FileOutputStream fos=new FileOutputStream(targetPath);
