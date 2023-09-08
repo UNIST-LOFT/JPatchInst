@@ -72,6 +72,8 @@ public class GlobalStates {
    */
   public static FileWriter resultFile=null;
 
+  public static int curId=0;
+
   /**
    * Initialize this class.
    * <p>

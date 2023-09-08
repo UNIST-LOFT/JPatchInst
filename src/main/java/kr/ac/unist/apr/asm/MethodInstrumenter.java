@@ -1,4 +1,4 @@
-package kr.ac.unist.apr.visitor;
+package kr.ac.unist.apr.asm;
 
 import java.util.ArrayDeque;
 import java.util.Deque;
@@ -6,13 +6,9 @@ import java.util.HashMap;
 import java.util.Map;
 
 import org.objectweb.asm.Label;
-import org.objectweb.asm.Opcodes;
 import org.objectweb.asm.tree.AbstractInsnNode;
-import org.objectweb.asm.tree.FieldInsnNode;
 import org.objectweb.asm.tree.InsnList;
 import org.objectweb.asm.tree.LabelNode;
-import org.objectweb.asm.tree.LdcInsnNode;
-import org.objectweb.asm.tree.MethodInsnNode;
 import org.objectweb.asm.tree.MethodNode;
 
 import kr.ac.unist.apr.Instrumenter;
@@ -74,13 +70,7 @@ public class MethodInstrumenter extends MethodNode {
         if (ids.containsKey(hashed)){
             int branchId=ids.get(hashed);
             // TODO: Change to actual instrumentation (now it is just print)
-            System.out.println(className+"::"+(currentLine+1)+"::"+branchId);
-            InsnList newInsns=new InsnList();
-            newInsns.add(new FieldInsnNode(Opcodes.GETSTATIC, "java/lang/System", "out",
-                                                    "Ljava/io/PrintStream;"));
-            newInsns.add(new LdcInsnNode("Branch ID:"+branchId));
-            newInsns.add(new MethodInsnNode(Opcodes.INVOKEVIRTUAL, "java/io/PrintStream", "println",
-                                        "(Ljava/lang/String;)V",false));
+            InsnList newInsns=Instruction.insertNewInstructions(branchId);
             this.newInsns.put((LabelNode)instructions.getLast(), newInsns);
         }
     }

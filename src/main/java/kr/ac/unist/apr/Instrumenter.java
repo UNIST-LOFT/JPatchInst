@@ -24,7 +24,8 @@ import org.objectweb.asm.tree.MethodNode;
 
 import kr.ac.unist.apr.utils.InsnNodeUtils;
 import kr.ac.unist.apr.utils.Path;
-import kr.ac.unist.apr.visitor.MethodInstrumenter;
+import kr.ac.unist.apr.asm.InstrumentClassWriter;
+import kr.ac.unist.apr.asm.MethodInstrumenter;
 
 /**
  * Main class of instrumentation.
@@ -124,18 +125,19 @@ public class Instrumenter {
                     Map<LabelNode,InsnList> newInsns=instrumenter.getNewInsns();
                     for (Map.Entry<LabelNode,InsnList> entry:newInsns.entrySet()){
                         int index=methodInfo.instructions.indexOf(entry.getKey());
-                        methodInfo.instructions.insert(methodInfo.instructions.get(index+1), entry.getValue());
+                        if (index+1<methodInfo.instructions.size()) // Check label is method end
+                            methodInfo.instructions.insert(methodInfo.instructions.get(index+1), entry.getValue());
                     }
                     methodInfo.check(Opcodes.ASM9);
                 }
             }
             
             // Save instrumented file
-            ClassWriter writer2=new ClassWriter(ClassWriter.COMPUTE_MAXS);
+            ClassWriter writer2=new InstrumentClassWriter(targetPath,ClassWriter.COMPUTE_MAXS|ClassWriter.COMPUTE_FRAMES);
             classNode.accept(writer2);
             
             node.check(Opcodes.ASM9);
-            ClassWriter writer=new ClassWriter(ClassWriter.COMPUTE_MAXS);
+            ClassWriter writer=new InstrumentClassWriter(targetPath,ClassWriter.COMPUTE_MAXS|ClassWriter.COMPUTE_FRAMES);
             node.accept(writer);
 
             System.out.println("Orig: "+writer2.toByteArray().length+", Patched: "+writer.toByteArray().length);

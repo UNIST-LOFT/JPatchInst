@@ -48,3 +48,14 @@ shadowJar {
         attributes 'Main-Class': 'kr.ac.unist.apr.Main'
     }
 }
+
+sourceSets {
+    main {
+        java {
+            srcDirs = ['src/main/java']
+        }
+        resources {
+            srcDirs = ['src/main/resources']
+        }
+    }
+}
