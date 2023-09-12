@@ -15,6 +15,15 @@ public class InstrumentClassWriter extends ClassWriter{
     }
 
     @Override
+    protected String getCommonSuperClass(final String type1, final String type2) {
+        try {
+            return super.getCommonSuperClass(type1, type2);
+        } catch (TypeNotPresentException e) {
+            return "java/lang/Object";
+        }
+    }
+
+    @Override
     protected ClassLoader getClassLoader() {
         try {
             return URLClassLoader.newInstance(new URL[]{directory.toURI().toURL()});
