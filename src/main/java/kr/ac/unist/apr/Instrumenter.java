@@ -106,6 +106,11 @@ public class Instrumenter {
             // Target class file
             ClassReader targetReader=targetNodes.get(originalCtxt.getKey());
             ClassNode node=new ClassNode();
+            if (targetReader==null) {
+                // Target class file not exist if patch removes whole 'public class'
+                Main.LOGGER.info("Class file "+originalCtxt.getKey()+" not found in target. Skip it.");
+                continue;
+            }
             targetReader.accept(node,0);
 
             // Skip if already instrumented
