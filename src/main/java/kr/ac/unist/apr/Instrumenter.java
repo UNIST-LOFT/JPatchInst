@@ -222,6 +222,9 @@ public class Instrumenter {
                         Main.LOGGER.warning("Duplicated ID: "+hashed);
                     ids.put(hashed,prevId++);
                 }
+                else {
+                    prevId++;
+                }
             }
         }
 
