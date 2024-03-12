@@ -1,7 +1,6 @@
 package kr.ac.unist.apr;
 
 import java.io.FileWriter;
-import java.io.IOException;
 
 /**
  * Handler for instrumented codes.
@@ -102,13 +101,13 @@ public class GlobalStates {
               }
             }
             resultFile.close();
-          } catch (IOException e) {
+          } catch (Exception e) {
             FileWriter fw;
             try {
               fw=new FileWriter("/tmp/greybox.err");
               fw.write(e.getMessage());
               fw.close();
-            } catch (IOException e1) {
+            } catch (Exception e1) {
               System.err.println("Cannot open error file: /tmp/greybox.err");
               e1.printStackTrace();
             }

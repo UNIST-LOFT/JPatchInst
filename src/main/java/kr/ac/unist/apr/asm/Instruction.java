@@ -49,10 +49,10 @@ public class Instruction {
         // GlobalStates.curId = GlobalStates.previousId ^ branchId;
         newInstructions.add(exit);
         // newInstructions.add(new FrameNode(Opcodes.F_APPEND, 1, new Object[] {Opcodes.INTEGER}, 0, null));
-        newInstructions.add(new FieldInsnNode(Opcodes.GETSTATIC, GlobalStates.STATE_CLASS_NAME.replace('.', '/'),
-            GlobalStates.STATE_PREV_ID, "I"));
+        // newInstructions.add(new FieldInsnNode(Opcodes.GETSTATIC, GlobalStates.STATE_CLASS_NAME.replace('.', '/'),
+        //     GlobalStates.STATE_PREV_ID, "I"));
         newInstructions.add(new IntInsnNode(Opcodes.SIPUSH,branchId));
-        newInstructions.add(new InsnNode(Opcodes.IXOR));
+        // newInstructions.add(new InsnNode(Opcodes.IXOR));
         newInstructions.add(new FieldInsnNode(Opcodes.PUTSTATIC, GlobalStates.STATE_CLASS_NAME.replace('.', '/'), "curId", "I"));
 
         // GlobalStates.branchCount[GlobalStates.curId]++;

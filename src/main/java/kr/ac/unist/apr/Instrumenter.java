@@ -9,6 +9,7 @@ import java.util.ArrayDeque;
 import java.util.Deque;
 import java.util.HashMap;
 import java.util.List;
+import java.util.ArrayList;
 import java.util.Map;
 import java.util.logging.Level;
 
@@ -48,6 +49,7 @@ public class Instrumenter {
 
     public static final int MAX_PREV_INSNS=10;
     private static int prevId=0;
+    private List<Integer> branchIds;
 
     /**
      * Default constructor.
@@ -59,8 +61,9 @@ public class Instrumenter {
      * @throws IOException if file not found or I/O errors
      */
     public Instrumenter(String targetSourcePath,
-                    String originalSourcePath) throws IOException {
+                    String originalSourcePath,List<Integer> branchIds) throws IOException {
         this.targetPath=targetSourcePath;
+        this.branchIds=branchIds;
 
         // generate ClassReader for original source
         Main.LOGGER.log(Level.INFO, "Parse Instructions for original source...");
@@ -81,6 +84,10 @@ public class Instrumenter {
             ClassReader reader=new ClassReader(new FileInputStream(source));
             targetNodes.put(Path.removeSrcPath(source, targetSourcePath),reader);
         }
+    }
+
+    public Instrumenter(String targetSourcePath, String originalSourcePath) throws IOException {
+        this(targetSourcePath, originalSourcePath, new ArrayList<>());
     }
     
     /**
@@ -192,27 +199,29 @@ public class Instrumenter {
             
             // Compute branch ID
             if (insn.getType()==AbstractInsnNode.JUMP_INSN) {
-                JumpInsnNode jumpInsn=(JumpInsnNode)insn;
-                LabelNode curLabel=jumpInsn.label;
-                int labelIndex=instructions.indexOf(curLabel);
+                if (branchIds.size()==0 || branchIds.contains(prevId)) {
+                    JumpInsnNode jumpInsn=(JumpInsnNode)insn;
+                    LabelNode curLabel=jumpInsn.label;
+                    int labelIndex=instructions.indexOf(curLabel);
 
-                Deque<AbstractInsnNode> prevInsns=new ArrayDeque<>();
-                for (int j=labelIndex-1;j>=0 && j>=Instrumenter.MAX_PREV_INSNS;j--) {
-                    prevInsns.add(instructions.get(j));
+                    Deque<AbstractInsnNode> prevInsns=new ArrayDeque<>();
+                    for (int j=labelIndex-1;j>=0 && j>=Instrumenter.MAX_PREV_INSNS;j--) {
+                        prevInsns.add(instructions.get(j));
+                    }
+
+                    String hashSource=className+"::"+methodName+"::"+methodDesc+"::";
+                    for (AbstractInsnNode prevInsn:prevInsns) {
+                        String nodeString=InsnNodeUtils.convertNodeToString(prevInsn);
+                        if (nodeString.length()>0)
+                            hashSource+=nodeString+";";
+                    }
+                    int hashed=hashSource.hashCode();
+                    hashStrings.put(hashed, hashSource);
+
+                    if (ids.containsKey(hashed))
+                        Main.LOGGER.warning("Duplicated ID: "+hashed);
+                    ids.put(hashed,prevId++);
                 }
-
-                String hashSource=className+"::"+methodName+"::"+methodDesc+"::";
-                for (AbstractInsnNode prevInsn:prevInsns) {
-                    String nodeString=InsnNodeUtils.convertNodeToString(prevInsn);
-                    if (nodeString.length()>0)
-                        hashSource+=nodeString+";";
-                }
-                int hashed=hashSource.hashCode();
-                hashStrings.put(hashed, hashSource);
-
-                if (ids.containsKey(hashed))
-                    Main.LOGGER.warning("Duplicated ID: "+hashed);
-                ids.put(hashed,prevId++);
             }
         }
 
