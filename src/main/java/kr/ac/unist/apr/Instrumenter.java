@@ -182,8 +182,11 @@ public class Instrumenter {
                 fos.close();
             }
         }
+        Main.LOGGER.log(Level.INFO, "Total instrumented: "+totalInstrumented);
+        Main.LOGGER.log(Level.INFO, "Final prev id: "+prevId);
     }
 
+    public static int totalInstrumented=0;
     /**
      * Compute branch IDs.
      * @param instructions instructions of method

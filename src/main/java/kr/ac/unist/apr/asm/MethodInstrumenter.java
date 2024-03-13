@@ -71,6 +71,7 @@ public class MethodInstrumenter extends MethodNode {
             int branchId=ids.get(hashed);
             InsnList newInsns=Instruction.insertNewInstructions(branchId);
             this.newInsns.put((LabelNode)instructions.getLast(), newInsns);
+            Instrumenter.totalInstrumented++;
         }
     }
 
