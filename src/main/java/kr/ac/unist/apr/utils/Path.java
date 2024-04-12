@@ -50,7 +50,8 @@ public class Path {
     public static String removeSrcPath(String absPath, String srcPath) {
         int length=srcPath.length();
         if (srcPath.endsWith("/")) length--;
-        String relPath=absPath.substring(length);
+        int startIndex=absPath.indexOf(srcPath);
+        String relPath=absPath.substring(startIndex+length);
         if (relPath.startsWith("/")) return relPath.substring(1);
         else return relPath;
     }
