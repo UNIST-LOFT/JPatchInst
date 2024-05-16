@@ -103,7 +103,6 @@ public class Instrumenter {
      */
     public void instrument() throws IOException{
         // Visit original source visitor and get IDs
-        // TODO: Cache/load this result with file
         Main.LOGGER.log(Level.INFO, "Instrument class file...");
         for (Map.Entry<String,ClassReader> originalCtxt:originalNodes.entrySet()){
             // Source class file
