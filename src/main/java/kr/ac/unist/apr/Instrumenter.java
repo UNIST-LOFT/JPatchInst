@@ -123,7 +123,7 @@ public class Instrumenter {
             boolean skip=false;
             for (FieldNode field:node.fields){
                 if (field.name.equals("greyboxInstrumented")){
-                    Main.LOGGER.log(Level.INFO, "Skip instrumenting "+originalCtxt.getKey());
+                    Main.LOGGER.log(Level.FINE, "Skip instrumenting "+originalCtxt.getKey());
                     skip=true;
                     break;
                 }
@@ -221,7 +221,7 @@ public class Instrumenter {
                     hashStrings.put(hashed, hashSource);
 
                     if (ids.containsKey(hashed))
-                        Main.LOGGER.warning("Duplicated ID: "+hashed);
+                        Main.LOGGER.finer("Duplicated ID: "+hashed);
                     ids.put(hashed,prevId++);
                 }
                 else {
