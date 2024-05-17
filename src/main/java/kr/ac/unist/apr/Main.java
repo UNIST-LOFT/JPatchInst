@@ -21,6 +21,7 @@ public class Main {
 
         Options options=new Options();
         options.addOption("i", "branch-id", true, "Branch ID to instrument. Seperated in comma(,). Default is all.");
+        options.addOption("t", "time-output-file", true, "Output file path for each time to instrument file");
 
         CommandLineParser parser=new DefaultParser();
         CommandLine cmd=null;
@@ -41,6 +42,8 @@ public class Main {
             }
         }
 
+        String timeOutputFile=cmd.getOptionValue("t", "");
+
         String[] parsedArgs=cmd.getArgs();
         
         String originalSourcePath=parsedArgs[0];
@@ -51,7 +54,7 @@ public class Main {
         try {
             LOGGER.log(Level.INFO, "Start instrumenting...");
             Instrumenter instrumenter=new Instrumenter(targetSourcePath,originalSourcePath,branchIdList);
-            instrumenter.instrument();
+            instrumenter.instrument(timeOutputFile);
             LOGGER.log(Level.INFO, "Instrumenting finished.");
         } catch (IOException e) {
             e.printStackTrace();

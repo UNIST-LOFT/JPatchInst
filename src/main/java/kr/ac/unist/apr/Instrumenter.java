@@ -4,12 +4,14 @@ import java.io.File;
 import java.io.FileInputStream;
 import java.io.FileNotFoundException;
 import java.io.FileOutputStream;
+import java.io.FileWriter;
 import java.io.IOException;
 import java.util.ArrayDeque;
 import java.util.Deque;
 import java.util.HashMap;
 import java.util.List;
 import java.util.ArrayList;
+import java.util.Calendar;
 import java.util.Map;
 import java.util.logging.Level;
 
@@ -101,14 +103,11 @@ public class Instrumenter {
      * </p>
      * @throws FileNotFoundException
      */
-    public void instrument() throws IOException{
+    public void instrument(String timeFileOutput) throws IOException{
         // Visit original source visitor and get IDs
         Main.LOGGER.log(Level.INFO, "Instrument class file...");
+        Map<String,Double> timeMap=new HashMap<>();
         for (Map.Entry<String,ClassReader> originalCtxt:originalNodes.entrySet()){
-            // Source class file
-            ClassNode classNode=new ClassNode();
-            originalCtxt.getValue().accept(classNode, 0);
-
             // Target class file
             ClassReader targetReader=targetNodes.get(originalCtxt.getKey());
             ClassNode node=new ClassNode();
@@ -129,6 +128,11 @@ public class Instrumenter {
                 }
             }
             if (skip) continue;
+
+            long start=Calendar.getInstance().getTimeInMillis();
+            // Source class file
+            ClassNode classNode=new ClassNode();
+            originalCtxt.getValue().accept(classNode, 0);
 
             Map<MethodNode,Map<Integer,Integer>> methodIds=new HashMap<>();
             for (MethodNode methodInfo:classNode.methods){
@@ -180,9 +184,25 @@ public class Instrumenter {
                 fos.write(newClass);
                 fos.close();
             }
+
+            double totalTime=(Calendar.getInstance().getTimeInMillis()-start)/1000.0; // Seconds
+            if (timeMap.containsKey(classNode.sourceFile)) {
+                timeMap.put(classNode.sourceFile, timeMap.get(classNode.sourceFile)+totalTime);
+            }
+            else {
+                timeMap.put(classNode.sourceFile, totalTime);
+            }
         }
         Main.LOGGER.log(Level.INFO, "Total instrumented: "+totalInstrumented);
         Main.LOGGER.log(Level.INFO, "Final prev id: "+prevId);
+
+        if (!timeFileOutput.equals("")) {
+            FileWriter writer=new FileWriter(timeFileOutput);
+            for (Map.Entry<String,Double> entry:timeMap.entrySet()){
+                writer.write(entry.getKey()+","+entry.getValue()+"\n");
+            }
+            writer.close();
+        }
     }
 
     public static int totalInstrumented=0;
