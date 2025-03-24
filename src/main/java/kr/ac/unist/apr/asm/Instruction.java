@@ -14,40 +14,45 @@ import org.objectweb.asm.tree.MethodInsnNode;
 import kr.ac.unist.apr.GlobalStates;
 
 public class Instruction {
-    public static InsnList insertNewInstructions(int branchId) {
-        InsnList newInstructions=new InsnList();
+    public static InsnList getInitInstructions() {
+        InsnList initInstructions=new InsnList();
 
         // if (System.getenv("GREYBOX_BRANCH").equals("1"))
-        newInstructions.add(new LdcInsnNode(GlobalStates.STATE_ENV_RECORD));
-        newInstructions.add(new MethodInsnNode(
-            Opcodes.INVOKESTATIC,
-            "java/lang/System",
-            "getenv",
-            "(Ljava/lang/String;)Ljava/lang/String;",
-            false
+        initInstructions.add(new LdcInsnNode(GlobalStates.STATE_ENV_RECORD));
+        initInstructions.add(new MethodInsnNode(
+                Opcodes.INVOKESTATIC,
+                "java/lang/System",
+                "getenv",
+                "(Ljava/lang/String;)Ljava/lang/String;",
+                false
         ));
-        newInstructions.add(new LdcInsnNode("1"));
-        newInstructions.add(new MethodInsnNode(
-            Opcodes.INVOKEVIRTUAL,
-            "java/lang/String",
-            "equals",
-            "(Ljava/lang/Object;)Z",
-            false
+        initInstructions.add(new LdcInsnNode("1"));
+        initInstructions.add(new MethodInsnNode(
+                Opcodes.INVOKEVIRTUAL,
+                "java/lang/String",
+                "equals",
+                "(Ljava/lang/Object;)Z",
+                false
         ));
         LabelNode exit=new LabelNode(new Label()); // Exit label
-        newInstructions.add(new JumpInsnNode(Opcodes.IFEQ,exit));
+        initInstructions.add(new JumpInsnNode(Opcodes.IFEQ,exit));
 
         // if (!GlobalStates.isInitialized)
-        newInstructions.add(new FieldInsnNode(Opcodes.GETSTATIC, GlobalStates.STATE_CLASS_NAME.replace('.', '/'),
-            GlobalStates.STATE_IS_INITIALIZED, "Z"));
-        newInstructions.add(new JumpInsnNode(Opcodes.IFNE, exit));
-        
+        initInstructions.add(new FieldInsnNode(Opcodes.GETSTATIC, GlobalStates.STATE_CLASS_NAME.replace('.', '/'),
+                GlobalStates.STATE_IS_INITIALIZED, "Z"));
+        initInstructions.add(new JumpInsnNode(Opcodes.IFNE, exit));
+
         // GlobalStates.initialize();
-        newInstructions.add(new MethodInsnNode(Opcodes.INVOKESTATIC, GlobalStates.STATE_CLASS_NAME.replace('.', '/'),
-            GlobalStates.STATE_INIT, "()V", false));
+        initInstructions.add(new MethodInsnNode(Opcodes.INVOKESTATIC, GlobalStates.STATE_CLASS_NAME.replace('.', '/'),
+                GlobalStates.STATE_INIT, "()V", false));
+        initInstructions.add(exit);
+
+        return initInstructions;
+    }
+    public static InsnList insertNewInstructions(int branchId) {
+        InsnList newInstructions=getInitInstructions();
 
         // GlobalStates.curId = GlobalStates.previousId ^ branchId;
-        newInstructions.add(exit);
         // newInstructions.add(new FrameNode(Opcodes.F_APPEND, 1, new Object[] {Opcodes.INTEGER}, 0, null));
         // newInstructions.add(new FieldInsnNode(Opcodes.GETSTATIC, GlobalStates.STATE_CLASS_NAME.replace('.', '/'),
         //     GlobalStates.STATE_PREV_ID, "I"));

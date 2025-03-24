@@ -45,9 +45,10 @@ public class Main {
         String timeOutputFile=cmd.getOptionValue("t", "");
 
         String[] parsedArgs=cmd.getArgs();
-        
-        String originalSourcePath=parsedArgs[0];
-        String targetSourcePath=parsedArgs[1];
+
+        // Convert Windows path separators (\\) to single backslash
+        String originalSourcePath=parsedArgs[0].replace("\\\\", "\\");
+        String targetSourcePath=parsedArgs[1].replace("\\\\", "\\");
         LOGGER.log(Level.INFO, "Original Source Path: "+originalSourcePath);
         LOGGER.log(Level.INFO, "Target Source Path: "+targetSourcePath);
 

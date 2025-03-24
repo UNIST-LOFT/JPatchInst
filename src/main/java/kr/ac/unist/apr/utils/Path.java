@@ -6,11 +6,13 @@ import java.util.List;
 
 /**
  * Utility class related to file/path.
+ *
  * @author Youngjae Kim (FreddyYJ)
  */
 public class Path {
     /**
      * Get all source files in the given directory.
+     *
      * @param rootDirectory root directory to search for source files (e.g. src/main/java for Maven project).
      * @return list of source files in absolute path.
      */
@@ -35,7 +37,7 @@ public class Path {
 
         // Remove classes from this instrumenter
         for (String source : new ArrayList<>(sources)) {
-            if (source.contains("kr/ac/unist/apr"))
+            if (source.contains("kr" + File.separator + "ac" + File.separator + "unist" + File.separator + "apr"))
                 sources.remove(source);
         }
         return sources;
@@ -43,16 +45,17 @@ public class Path {
 
     /**
      * Removes class path from absolute path.
+     *
      * @param absPath absolute path
      * @param srcPath class path
      * @return relative path from class path
      */
     public static String removeSrcPath(String absPath, String srcPath) {
-        int length=srcPath.length();
-        if (srcPath.endsWith("/")) length--;
-        int startIndex=absPath.indexOf(srcPath);
-        String relPath=absPath.substring(startIndex+length);
-        if (relPath.startsWith("/")) return relPath.substring(1);
+        int length = srcPath.length();
+        if (srcPath.endsWith(File.separator)) length--;
+        int startIndex = absPath.indexOf(srcPath);
+        String relPath = absPath.substring(startIndex + length);
+        if (relPath.startsWith(File.separator)) return relPath.substring(1);
         else return relPath;
     }
 }
