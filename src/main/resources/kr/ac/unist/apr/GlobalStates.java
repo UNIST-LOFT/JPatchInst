@@ -105,13 +105,12 @@ public class GlobalStates {
     private static Object[] fieldValues = new Object[200000];
     private static int fieldIndex = 0;
 
-
-    @SuppressWarnings("rawtypes")
     public static void logFieldChanges(Object instance, String owner) {
         try {
             Class clazz = Class.forName(owner.replace(".class", ""));
             Field[] fields = clazz.getDeclaredFields();
-            for (Field field : fields) {
+            for (int i=0;i<fields.length;i++) {
+                Field field = fields[i];
                 if (field.getName().equals("greyboxInstrumented")) continue;
                 if (!Modifier.isStatic(field.getModifiers()) && instance == null) continue;
 
@@ -168,9 +167,11 @@ public class GlobalStates {
                             
                             String result;
                             if (value instanceof Boolean) {
-                                result = ((Boolean)value ? "1" : "0");
+                                boolean b = ((Boolean)value).booleanValue();
+                                result = b ? "1" : "0";
                             } else if (value instanceof Character) {
-                                result = Integer.toString(Character.getNumericValue((Character)value));
+                                char c = ((Character)value).charValue();
+                                result = Integer.toString(Character.getNumericValue(c));
                             } else {
                                 result = value.toString();
                             }

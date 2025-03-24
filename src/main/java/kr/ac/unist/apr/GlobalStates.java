@@ -105,13 +105,13 @@ public class GlobalStates {
     private static Object[] fieldValues = new Object[200000];
     private static int fieldIndex = 0;
 
-    @SuppressWarnings("rawtypes")
     public static void logFieldChanges(Object instance, String owner) {
         try {
             // Generic type not supported under 1.5
             Class clazz = Class.forName(owner.replace(".class", ""));
             Field[] fields = clazz.getDeclaredFields();
-            for (Field field : fields) {
+            for (int i=0;i<fields.length;i++) {
+                Field field = fields[i];
                 if (field.getName().equals("greyboxInstrumented")) continue;
                 if (!Modifier.isStatic(field.getModifiers()) && instance == null) continue;
 
